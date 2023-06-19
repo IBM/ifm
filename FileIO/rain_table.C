@@ -2,6 +2,7 @@
 #include <assert.h>
 #include <string.h>
 #include <ctype.h>
+#include <libgen.h>
 #include "grid.h"
 #include "engine.h"
 #include "rain_table.h"

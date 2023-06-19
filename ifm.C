@@ -8,6 +8,7 @@
 #include <sys/types.h>
 #include <sys/stat.h>
 #include <list>
+#include <libgen.h>
 
 #include "watch.h"
 #include "engine.h"
