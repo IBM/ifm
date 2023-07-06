@@ -186,7 +186,6 @@ char* find_basename(char *input) {
   return rc;
 }
 
-
 void georeference(NetCDF *netcdf, string targetFile, string referenceFile)
 {
   netcdf->copyVar(referenceFile, "", targetFile);
@@ -543,8 +542,19 @@ int main(int argc, char* argv[]) {
   int start_pt = (int)((real_t)options.tbegin/dt);
   int num_pt =(int)((real_t)options.tfinal/dt);
 
+  // initialise OpenMP timers
+  double t_intercept    = 0.0;
+  double t_overland     = 0.0;
+  double t_infiltration = 0.0;
+  double t_diffusive    = 0.0;
+  double t_outlet       = 0.0;
+
+  // for each time step kk
   for (int kk=start_pt; kk<num_pt || draining == false; kk++) {
-    engine.run(kk, dt);
+
+    // launch computation engine
+    engine.run(kk, dt,
+        &t_intercept, &t_overland, &t_infiltration, &t_diffusive, &t_outlet);
     rotating_wheel();
 
     /* selective printing */
@@ -619,6 +629,11 @@ int main(int argc, char* argv[]) {
       }
     }
   }
+  // print out OpenMP timer values
+  printf("t_intr\tt_over\tt_infl\tt_diff\tt_outl\n");
+  printf("%g\t%g\t%g\t%g\t%g\n",
+      t_intercept, t_overland, t_infiltration, t_diffusive, t_outlet);
+
   printf("Done\n");
 
   if (options.simulationState.size()) {

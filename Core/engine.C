@@ -1,19 +1,20 @@
 /* top level driver to make it work */
+#include <ctype.h>
+#include <errno.h>
+#include <math.h>
+#include <omp.h>
 #include <stdio.h>
 #include <stdlib.h>
-#include <unistd.h>
-#include <time.h>
-#include <zlib.h>
-#include <ctype.h>
-#include <math.h>
 #include <sys/stat.h>
-#include <errno.h>
+#include <time.h>
+#include <unistd.h>
+#include <zlib.h>
 
-#include "ifm_common.h"
 #include "engine.h"
 #include "filter.h"
-#include "rain_table.h"
+#include "ifm_common.h"
 #include "netcdf.h"
+#include "rain_table.h"
 
 #define MANNINGS \
   0.246,  0.41,  0.235, 0.184, 0.02, 0.15, 0.090, 0.24,  0.400, 0.450, \
@@ -56,7 +57,7 @@ void Engine::setup()
     _retention_coef_size = sizeof(default_retention_coef)/sizeof(default_retention_coef[0]);
   }
 
-  /* 
+  /*
      We now read the values from file, but keep them here as reference
 
      Hydraulic conductivity, cm/hr 
@@ -65,7 +66,7 @@ void Engine::setup()
      Pressure head @ wetting front, in cm 
      real_t infilt_coef2[] = {0.0, 22, 14, 17, 22, 18, 22, 15 };  // start @ 1, pressure head
 
-     Soild moisture deficit, no conversion needed. Consider splitting into effective
+     Solid moisture deficit, no conversion needed. Consider splitting into effective
      porosity and initial moisture content 
      real_t infilt_coef3[] = {0.0, 0.29,0.29,0.29,0.29,0.29,0.29,0.29};  // start @ 1
    */
@@ -92,7 +93,8 @@ void Engine::setup()
     _ws.SetSoil(_soil_hc->data, 1.0/_cmhr, _soil_ph->data, 1.0/_cm2m, _soil_ep->data, 1.0, _soilMoisture->data);
 }
 
-void Engine::run(uint64_t kk, real_t dt)
+void Engine::run(uint64_t kk, real_t dt, double *t_intercept, double *t_overland,
+                 double *t_infiltration,  double *t_diffusive, double *t_outlet)
 {
   // uint64_t pre_cntr = (uint64_t)(pre_window/dt);
 
@@ -106,15 +108,27 @@ void Engine::run(uint64_t kk, real_t dt)
     _ws.SetPrecipitation(pp->data, _mmhr);
   }
 #ifndef ROUTING_ONLY
+  double t_intercept_0 = omp_get_wtime();
   _ws.CompIntercept(dt);
+  *t_intercept += (omp_get_wtime() - t_intercept_0);
 #endif
+  double t_overland_0  = omp_get_wtime();
   _ws.CompOverlandDepth(dt);
+  *t_overland += (omp_get_wtime() - t_overland_0);
 #ifndef ROUTING_ONLY
-  if (_soil_hc && _soil_ph && _soil_ep)
+  if (_soil_hc && _soil_ph && _soil_ep) {
+    double t_infiltration_0 = omp_get_wtime();
     _ws.CompInfiltration(dt);
+    *t_infiltration += (omp_get_wtime() - t_infiltration_0);
+  }
 #endif
+  double t_diffusive_0 = omp_get_wtime();
   _ws.CompDiffusiveRouting(dt);
+  *t_diffusive += (omp_get_wtime() - t_diffusive_0);
+
+  double t_outlet_0 = omp_get_wtime();
   _ws.CompOutlet(dt);
+  *t_outlet += (omp_get_wtime() - t_outlet_0);
 }
 
 /* end */

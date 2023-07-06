@@ -119,7 +119,11 @@ class Engine {
     }
 
     void setup();
-    void run(uint64_t kk, real_t dt);
+
+    // void run(uint64_t kk, real_t dt);
+    void run(uint64_t kk, real_t dt, double *t_intercept, double *t_overland,
+             double *t_infiltration,  double *t_diffusive, double *t_outlet);
+
     Grid* getDEM() {
         return _dem;
     }

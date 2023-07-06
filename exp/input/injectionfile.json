@@ -1,0 +1,1 @@
+[{"source": "COS", "credential_secret": "coscred", "credential_env": "COSCRED", "bucket": "cimf-wg-extreme-test", "cos-region": "eu-gb", "filename": "AMJJAS_RP2/AMJJAS_RP2_precip-07_01_2022*"}]

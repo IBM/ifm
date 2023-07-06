@@ -31,20 +31,19 @@ def launch_ifm(inputdir, outputdir):
     # spatial_resolution = 30
 
     # Extract the SRTM resolution from the input DEM file, in meters
-    f = Dataset('/DEM.nc','r')
+    f = Dataset(inputdir + '/DEM.nc','r')
 
-    lat0 = f.variables['lat'][:].data[0]; lat1 = f.variables['lat'][:].data[1]
-    lon0 = f.variables['lon'][:].data[0]; lon1 = f.variables['lon'][:].data[1]
-    llc00 = utm.from_latlon(lat0, lon0); llc01 = utm.from_latlon(lat0, lon1); llc10 = utm.from_latlon(lat1, lon0)
+    lat0     = f.variables['lat'][:].data[0]; lat1 = f.variables['lat'][:].data[1]
+    lon0     = f.variables['lon'][:].data[0]; lon1 = f.variables['lon'][:].data[1]
+    llc00    = utm.from_latlon(lat0, lon0); llc01 = utm.from_latlon(lat0, lon1); llc10 = utm.from_latlon(lat1, lon0)
     ll_dists = [abs(llc10[1]-llc00[1]), abs(llc01[0]-llc00[0])]
 
     spatial_resolution = sum(ll_dists)/len(ll_dists)
 
-
-    output_rate = int(os.environ.get('OUTRATE', 3600))  # Output rate, in seconds. We don't want too many output files.
-    simulation_timestep = float(os.environ.get('SIMRATE', 1.0))  # Simulation timestep, default 1.0 second
-    initial_soil_moisture = os.environ.get('SMINPUT', '0.0')  # Initial soil moisture value or input filename
-    outputLayers = os.environ.get('OUTLAYERS','depth') # Comma separated list of output layers - depth,flowrate,olr,vsat,maxvolume
+    output_rate           = int(os.environ.get('OUTRATE', 3600))  # Output rate, in seconds. We don't want too many output files.
+    simulation_timestep   = float(os.environ.get('SIMRATE', 1.0)) # Simulation timestep, default 1.0 second
+    initial_soil_moisture = os.environ.get('SMINPUT', '0.0')      # Initial soil moisture value or input filename
+    outputLayers          = os.environ.get('OUTLAYERS','depth')   # Comma separated list of output layers - depth,flowrate,olr,vsat,maxvolume
 
     outputLayers = outputLayers.replace('-',',')
     print(outputLayers, file=sys.stderr)
@@ -69,7 +68,6 @@ def launch_ifm(inputdir, outputdir):
     #     if os.environ.get('SMINPUT') != '':
     #         initial_soil_moisture = os.environ['SMINPUT']
 
-
     # Each instance of IFM will attempt to make the best use of CPU
     # resources, so we don't want to launch parallel instances of the
     # model. Here we serialize the calls to IFM by creating a wrapper
@@ -91,16 +89,16 @@ def launch_ifm(inputdir, outputdir):
             t2 = int(pp_data[-2].split(" ")[0])
             simulation_time_in_sec = t1 + (t1-t2)
 
-    print("Simulation time in seconds = " + str(simulation_time_in_sec), file=sys.stderr)
+    print("Simulation time in seconds     = " + str(simulation_time_in_sec), file=sys.stderr)
     print("Simulation timestep in seconds = " + str(simulation_timestep), file=sys.stderr)
-    print("Simulation output rate = " + str(output_rate), file=sys.stderr)
-    print("Initial soil moisture = " + str(initial_soil_moisture), file=sys.stderr)
-    print("Simulation output layers = " + str(outputLayers), file=sys.stderr)
+    print("Simulation output rate         = " + str(output_rate), file=sys.stderr)
+    print("Initial soil moisture          = " + str(initial_soil_moisture), file=sys.stderr)
+    print("Simulation output layers       = " + str(outputLayers), file=sys.stderr)
 
     wrapper = ""
     ifm_command = [
-        "/ifm/ifm",
-        "-O", '/', #pp_dir,
+        "./ifm",
+        "-O", f"{outputdir}",
         "-d", f"{inputdir}/DEM.nc",
         "-p", f"{inputdir}/Precipitation.csv",
         "-f", str(simulation_time_in_sec),
@@ -129,9 +127,8 @@ def combineCompress(outputPath):
         print('Combining outputs from ' + p)
         os.system('/combine_outputs.sh ' + p)
 
-
 if __name__ == '__main__':
-    launch_ifm('','')
+    launch_ifm('./input','./output')
 
-    if os.environ.get('COMBCOMP','Y') == 'Y':
-        combineCompress('/')
+    # if os.environ.get('COMBCOMP','Y') == 'Y':
+        # combineCompress('/')
