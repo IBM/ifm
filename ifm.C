@@ -294,8 +294,9 @@ void dumpInformation(const char *fname, const char *base, int ismaskgen, OptionP
     fprintf(F, "Output VSAT:                     \t\t%s\n", options->saveVSAT ? "YES" : "NO");
     fprintf(F, "\n");
     fprintf(F, "Simulation time step:            \t\t%.1f sec\n", options->tstep);
-    fprintf(F, "Simulation Tstop:                \t\t%d sec\n", options->tfinal);
-    fprintf(F, "Printing interval:               \t\t%d sec\n", options->outputRate);
+    fprintf(F, "Simulation Tstop:                \t\t%d sec\n",   options->tfinal);
+    fprintf(F, "Infiltration stage:              \t\t%d\n",       options->infiltration_flag);
+    fprintf(F, "Printing interval:               \t\t%d sec\n",   options->outputRate);
     fclose(F);
   }
 }
@@ -553,7 +554,7 @@ int main(int argc, char* argv[]) {
   for (int kk=start_pt; kk<num_pt || draining == false; kk++) {
 
     // launch computation engine
-    engine.run(kk, dt,
+    engine.run(kk, dt, options.infiltration_flag,
         &t_intercept, &t_overland, &t_infiltration, &t_diffusive, &t_outlet);
     rotating_wheel();
 

@@ -9,6 +9,7 @@
 #include <time.h>
 #include <unistd.h>
 #include <zlib.h>
+#include <stdbool.h>
 
 #include "engine.h"
 #include "filter.h"
@@ -93,7 +94,7 @@ void Engine::setup()
     _ws.SetSoil(_soil_hc->data, 1.0/_cmhr, _soil_ph->data, 1.0/_cm2m, _soil_ep->data, 1.0, _soilMoisture->data);
 }
 
-void Engine::run(uint64_t kk, real_t dt, double *t_intercept, double *t_overland,
+void Engine::run(uint64_t kk, real_t dt, bool infiltration_flag, double *t_intercept, double *t_overland,
                  double *t_infiltration,  double *t_diffusive, double *t_outlet)
 {
   // uint64_t pre_cntr = (uint64_t)(pre_window/dt);
@@ -116,10 +117,16 @@ void Engine::run(uint64_t kk, real_t dt, double *t_intercept, double *t_overland
   _ws.CompOverlandDepth(dt);
   *t_overland += (omp_get_wtime() - t_overland_0);
 #ifndef ROUTING_ONLY
-  if (_soil_hc && _soil_ph && _soil_ep) {
-    double t_infiltration_0 = omp_get_wtime();
-    _ws.CompInfiltration(dt);
-    *t_infiltration += (omp_get_wtime() - t_infiltration_0);
+  if (infiltration_flag) {
+    printf("Entering infiltration stage...\n");
+
+    if (_soil_hc && _soil_ph && _soil_ep) {
+      double t_infiltration_0 = omp_get_wtime();
+      _ws.CompInfiltration(dt);
+      *t_infiltration += (omp_get_wtime() - t_infiltration_0);
+    }
+
+    printf("Exiting infiltration stage...\n");
   }
 #endif
   double t_diffusive_0 = omp_get_wtime();

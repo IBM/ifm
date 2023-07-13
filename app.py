@@ -105,6 +105,7 @@ def launch_ifm(inputdir, outputdir):
         "-s", str(simulation_timestep),
         "-r", str(output_rate),
         "-c", str(spatial_resolution),
+        "-i", str(0),  # infiltration_flag
         "-l", f"{inputdir}/LandCover.nc",
         "-L", f"{inputdir}/LandCover.map",
         "-H", f"{inputdir}/SoilHydraulicConductivity.nc",

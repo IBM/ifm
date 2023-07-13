@@ -2,6 +2,7 @@
 #include <iostream>
 #include <string>
 #include <vector>
+#include <stdbool.h>
 
 using namespace std;
 
@@ -28,6 +29,7 @@ class OptionParser {
     int    cellsize;        // Grid cell size, in meters
     int    tbegin;
     int    tfinal;
+    bool   infiltration_flag;
     int    outputRate;      // How often to output files (in seconds)
     double soil_hc_multiplier;
     double soil_ph_multiplier;
@@ -63,6 +65,7 @@ class OptionParser {
       cellsize = 90;
       tbegin = 0;
       tfinal = 1800;
+      infiltration_flag = true;
       tstep = 1.0;
       outputRate = 300;
       saveFlowRate = false;
@@ -79,7 +82,7 @@ class OptionParser {
 
     void parse()
     {
-      const char *short_options = "b:c:d:f:hl:L:m:M:n:o:O:p:r:s:w:1:2:3:H:E:P:S:V:";
+      const char *short_options = "b:c:d:f:h:i:l:L:m:M:n:o:O:p:r:s:w:1:2:3:H:E:P:S:V:";
       const struct option long_options[] = {
         { "cellsize",      required_argument, 0, 'c' },
         { "dem",           required_argument, 0, 'd' },
@@ -101,6 +104,7 @@ class OptionParser {
         { "soil-ph-multiplier", required_argument, 0, '3' },
         { "soil-moisture", required_argument, 0, 'M' },
         { "tfinal",        required_argument, 0, 'f' },
+        { "infiltration",  required_argument, 0, 'i' },
         { "tbegin",        required_argument, 0, 'b' },
         { "tstep",         required_argument, 0, 's' },
         { "watch",         required_argument, 0, 'w' },
@@ -149,6 +153,9 @@ class OptionParser {
             break;
           case 'f':
             tfinal = atoi(optarg);
+            break;
+          case 'i':
+            infiltration_flag = atoi(optarg);
             break;
           case 'r':
             outputRate = atoi(optarg);
@@ -255,10 +262,11 @@ class OptionParser {
       cout << endl;
 
       cout << "SIMULATION options:" << endl;
-      cout << "    -b, --tbegin=NUM_SECONDS      Simulation start time (default: " << tbegin << ")" << endl;
-      cout << "    -f, --tfinal=NUM_SECONDS      Simulation end time (default: " << tfinal << ")" << endl;
-      cout << "    -s, --tstep=NUM_SECONDS       Time step in seconds (default: " << tstep << ")" << endl;
-      cout << "    -S, --state=FILE              Save/restore simulation state from the given file" << endl;
+      cout << "    -b, --tbegin=NUM_SECONDS         Simulation start time (default: " << tbegin << ")" << endl;
+      cout << "    -f, --tfinal=NUM_SECONDS         Simulation end time (default: " << tfinal << ")" << endl;
+      cout << "    -i, --infiltration=BOOLEAN <0|1> Conduct infiltration stage (default: " << infiltration_flag << ")" << endl;
+      cout << "    -s, --tstep=NUM_SECONDS          Time step in seconds (default: " << tstep << ")" << endl;
+      cout << "    -S, --state=FILE                 Save/restore simulation state from the given file" << endl;
       cout << endl;
 
       cout << "UNIFORM precipitation file example:" << endl;

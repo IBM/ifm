@@ -1,6 +1,7 @@
 #ifndef __ENGINE_H
 #define __ENGINE_H
 
+#include <stdbool.h>
 #include <stdio.h>
 #include <string>
 #include <zlib.h>
@@ -121,7 +122,7 @@ class Engine {
     void setup();
 
     // void run(uint64_t kk, real_t dt);
-    void run(uint64_t kk, real_t dt, double *t_intercept, double *t_overland,
+    void run(uint64_t kk, real_t dt, bool infiltration_flag, double *t_intercept, double *t_overland,
              double *t_infiltration,  double *t_diffusive, double *t_outlet);
 
     Grid* getDEM() {
