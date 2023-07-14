@@ -1,8 +1,19 @@
+/*
+ * @brief   Defines IFM functionality to parse command line arguments.
+ *
+ * @author <main author>
+ * @email  <main author's email>
+ * @author  Maksims Abalenkovs
+ * @email   maksims.abalenkovs@stfc.ac.uk
+ * @date    Jul 14, 2023
+ * @version 1.1
+ */
+
 #include <getopt.h>
 #include <iostream>
+#include <stdbool.h>
 #include <string>
 #include <vector>
-#include <stdbool.h>
 
 using namespace std;
 
@@ -15,65 +26,67 @@ class OptionParser {
     string mask;
     string landuse;
     string landuseMap;
-    string soil_hc; // Hydraulic Conductivity
-    string soil_ph; // Pressure Head
-    string soil_ep; // Effective Porosity
+    string soil_hc;             // Hydraulic Conductivity
+    string soil_ph;             // Pressure Head
+    string soil_ep;             // Effective Porosity
     string soilMoisture;
     string outlet;
     string outdir;
-    string watch;   // Points of interest to watch
+    string watch;               // Points of interest to watch
     string precipitation;
-    string simulationState; // File holding the simulation state
+    string simulationState;     // File holding the simulation state
     string outputVars;
     vector<real_t> nodata;
-    int    cellsize;        // Grid cell size, in meters
+    int    cellsize;            // Grid cell size, in meters
     int    tbegin;
     int    tfinal;
-    bool   infiltration_flag;
-    int    outputRate;      // How often to output files (in seconds)
+    bool   infiltrate_flag;     // enable/disable infiltration stage
+    bool   profile_flag;        // enable/disable profiling of code (elapsed time measurement)
+    int    outputRate;          // How often to output files (in seconds)
     double soil_hc_multiplier;
     double soil_ph_multiplier;
     double soil_ep_multiplier;
     double tstep;
-    bool   saveFlowRate;    // Output flow rate?
-    bool   saveDepth;       // Output water height?
-    bool   saveVolume;      // Output accumulated water volume?
-    bool   saveOLR;         // Output OLR?
-    bool   saveVSAT;        // Output VSAT?
+    bool   saveFlowRate;        // Output flow rate?
+    bool   saveDepth;           // Output water height?
+    bool   saveVolume;          // Output accumulated water volume?
+    bool   saveOLR;             // Output OLR?
+    bool   saveVSAT;            // Output VSAT?
 
     OptionParser(int argc, char **argv)
     {
       _argc = argc;
       _argv = argv;
-      dem = "";
-      mask = "";
-      landuse = "";
-      landuseMap = "";
+      dem                = "";
+      mask               = "";
+      landuse            = "";
+      landuseMap         = "";
       nodata.clear();
-      soil_hc = "";
-      soil_ph = "";
-      soil_ep = "";
+      soil_hc            = "";
+      soil_ph            = "";
+      soil_ep            = "";
       soil_ep_multiplier = 1.0;
       soil_hc_multiplier = 1.0;
       soil_ph_multiplier = 1.0;
-      soilMoisture = "0";
-      outlet = "";
-      outdir = ".";
-      watch = "";
-      precipitation = "";
-      simulationState = "";
-      cellsize = 90;
-      tbegin = 0;
-      tfinal = 1800;
-      infiltration_flag = true;
-      tstep = 1.0;
-      outputRate = 300;
-      saveFlowRate = false;
-      saveVolume = false;
-      saveOLR = false;
-      saveVSAT = false;
-      saveDepth  = true;
-      outputVars = "depth";
+      soilMoisture       = "0";
+      outlet             = "";
+      outdir             = ".";
+      watch              = "";
+      precipitation      = "";
+      simulationState    = "";
+      cellsize           =   90;
+      tbegin             =    0;
+      tfinal             = 1800;
+      infiltrate_flag    = true;
+      profile_flag       = false;
+      tstep              =    1.0;
+      outputRate         =  300;
+      saveFlowRate       = false;
+      saveVolume         = false;
+      saveOLR            = false;
+      saveVSAT           = false;
+      saveDepth          = true;
+      outputVars         ="depth";
     }
 
     ~OptionParser()
@@ -82,7 +95,7 @@ class OptionParser {
 
     void parse()
     {
-      const char *short_options = "b:c:d:f:h:i:l:L:m:M:n:o:O:p:r:s:w:1:2:3:H:E:P:S:V:";
+      const char *short_options = "b:c:d:f:h:i:l:L:m:M:n:o:O:p:r:s:t:w:1:2:3:H:E:P:S:V:";
       const struct option long_options[] = {
         { "cellsize",      required_argument, 0, 'c' },
         { "dem",           required_argument, 0, 'd' },
@@ -104,7 +117,8 @@ class OptionParser {
         { "soil-ph-multiplier", required_argument, 0, '3' },
         { "soil-moisture", required_argument, 0, 'M' },
         { "tfinal",        required_argument, 0, 'f' },
-        { "infiltration",  required_argument, 0, 'i' },
+        { "infiltrate",    required_argument, 0, 'i' },
+        { "profile",       required_argument, 0, 't' },
         { "tbegin",        required_argument, 0, 'b' },
         { "tstep",         required_argument, 0, 's' },
         { "watch",         required_argument, 0, 'w' },
@@ -155,7 +169,10 @@ class OptionParser {
             tfinal = atoi(optarg);
             break;
           case 'i':
-            infiltration_flag = atoi(optarg);
+            infiltrate_flag = atoi(optarg);
+            break;
+          case 't':
+            profile_flag = atoi(optarg);
             break;
           case 'r':
             outputRate = atoi(optarg);
@@ -262,11 +279,12 @@ class OptionParser {
       cout << endl;
 
       cout << "SIMULATION options:" << endl;
-      cout << "    -b, --tbegin=NUM_SECONDS         Simulation start time (default: " << tbegin << ")" << endl;
-      cout << "    -f, --tfinal=NUM_SECONDS         Simulation end time (default: " << tfinal << ")" << endl;
-      cout << "    -i, --infiltration=BOOLEAN <0|1> Conduct infiltration stage (default: " << infiltration_flag << ")" << endl;
-      cout << "    -s, --tstep=NUM_SECONDS          Time step in seconds (default: " << tstep << ")" << endl;
-      cout << "    -S, --state=FILE                 Save/restore simulation state from the given file" << endl;
+      cout << "    -b, --tbegin    =NUM_SECONDS   Simulation start time (default: " << tbegin << ")" << endl;
+      cout << "    -f, --tfinal    =NUM_SECONDS   Simulation end time (default: " << tfinal << ")" << endl;
+      cout << "    -i, --infiltrate=BOOLEAN <0|1> Conduct infiltration stage (default: " << infiltrate_flag << ")" << endl;
+      cout << "    -t, --profile   =BOOLEAN <0|1> Profile code (default: " << profile_flag << ")" << endl;
+      cout << "    -s, --tstep     =NUM_SECONDS   Time step in seconds (default: " << tstep << ")" << endl;
+      cout << "    -S, --state     =FILE          Save/restore simulation state from the given file" << endl;
       cout << endl;
 
       cout << "UNIFORM precipitation file example:" << endl;
@@ -292,3 +310,5 @@ class OptionParser {
       exit(retval);
     }
 };
+
+// @eof option_parser.h

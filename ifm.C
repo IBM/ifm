@@ -1,4 +1,14 @@
-/* top level driver to make it work */
+/*
+ * @brief   Defines main workflow of IFM algorithm.
+ *
+ * @author <main author>
+ * @email  <main author's email>
+ * @author  Maksims Abalenkovs
+ * @email   maksims.abalenkovs@stfc.ac.uk
+ * @date    Jul 14, 2023
+ * @version 1.1
+ */
+
 #include <stdio.h>
 #include <stdlib.h>
 #include <unistd.h>
@@ -288,14 +298,15 @@ void dumpInformation(const char *fname, const char *base, int ismaskgen, OptionP
     fprintf(F, "Outlet file:                     \t\t%s\n", options->outlet.c_str());
     fprintf(F, "Precipitation file:              \t\t%s\n", options->precipitation.c_str());
     fprintf(F, "Output flow rate:                \t\t%s\n", options->saveFlowRate ? "YES" : "NO");
-    fprintf(F, "Output depth:                    \t\t%s\n", options->saveDepth ? "YES" : "NO");
-    fprintf(F, "Output max volume:               \t\t%s\n", options->saveVolume ? "YES" : "NO");
-    fprintf(F, "Output OLR:                      \t\t%s\n", options->saveOLR ? "YES" : "NO");
-    fprintf(F, "Output VSAT:                     \t\t%s\n", options->saveVSAT ? "YES" : "NO");
+    fprintf(F, "Output depth:                    \t\t%s\n", options->saveDepth    ? "YES" : "NO");
+    fprintf(F, "Output max volume:               \t\t%s\n", options->saveVolume   ? "YES" : "NO");
+    fprintf(F, "Output OLR:                      \t\t%s\n", options->saveOLR      ? "YES" : "NO");
+    fprintf(F, "Output VSAT:                     \t\t%s\n", options->saveVSAT     ? "YES" : "NO");
     fprintf(F, "\n");
     fprintf(F, "Simulation time step:            \t\t%.1f sec\n", options->tstep);
     fprintf(F, "Simulation Tstop:                \t\t%d sec\n",   options->tfinal);
-    fprintf(F, "Infiltration stage:              \t\t%d\n",       options->infiltration_flag);
+    fprintf(F, "Infiltration stage:              \t\t%s\n",       options->infiltrate_flag ? "YES" : "NO");
+    fprintf(F, "Profile code:                    \t\t%s\n",       options->profile_flag    ? "YES" : "NO");
     fprintf(F, "Printing interval:               \t\t%d sec\n",   options->outputRate);
     fclose(F);
   }
@@ -544,18 +555,24 @@ int main(int argc, char* argv[]) {
   int num_pt =(int)((real_t)options.tfinal/dt);
 
   // initialise OpenMP timers
-  double t_intercept    = 0.0;
-  double t_overland     = 0.0;
-  double t_infiltration = 0.0;
-  double t_diffusive    = 0.0;
-  double t_outlet       = 0.0;
+  real_t t_intercept    = 0.0;
+  real_t t_overland     = 0.0;
+  real_t t_infiltration = 0.0;
+  real_t t_diffusive    = 0.0;
+  real_t t_outlet       = 0.0;
 
   // for each time step kk
   for (int kk=start_pt; kk<num_pt || draining == false; kk++) {
 
     // launch computation engine
-    engine.run(kk, dt, options.infiltration_flag,
-        &t_intercept, &t_overland, &t_infiltration, &t_diffusive, &t_outlet);
+    if (options.profile_flag) {
+        engine.profile_run(kk, dt, options.infiltrate_flag,
+            &t_intercept, &t_overland, &t_infiltration,
+            &t_diffusive, &t_outlet);
+    }
+    else {
+        engine.run(kk, dt, options.infiltrate_flag);
+    }
     rotating_wheel();
 
     /* selective printing */
@@ -630,10 +647,14 @@ int main(int argc, char* argv[]) {
       }
     }
   }
+
   // print out OpenMP timer values
-  printf("t_intr\tt_over\tt_infl\tt_diff\tt_outl\n");
-  printf("%g\t%g\t%g\t%g\t%g\n",
-      t_intercept, t_overland, t_infiltration, t_diffusive, t_outlet);
+  if (options.profile_flag) {
+
+      printf("t_intr\tt_over\tt_infl\tt_diff\tt_outl\n");
+      printf("%g\t%g\t%g\t%g\t%g\n",
+          t_intercept, t_overland, t_infiltration, t_diffusive, t_outlet);
+  }
 
   printf("Done\n");
 
@@ -643,7 +664,8 @@ int main(int argc, char* argv[]) {
   }
 
   DELETE_OBJS();
+
   return 0;
 }
 
-/* end */
+// @eof ifm.C

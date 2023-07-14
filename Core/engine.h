@@ -1,3 +1,14 @@
+/*
+ * @brief   Declares functions for top level simulation driver.
+ *
+ * @author <main author>
+ * @email  <main author's email>
+ * @author  Maksims Abalenkovs
+ * @email   maksims.abalenkovs@stfc.ac.uk
+ * @date    Jul 14, 2023
+ * @version 1.1
+ */
+
 #ifndef __ENGINE_H
 #define __ENGINE_H
 
@@ -121,9 +132,12 @@ class Engine {
 
     void setup();
 
-    // void run(uint64_t kk, real_t dt);
-    void run(uint64_t kk, real_t dt, bool infiltration_flag, double *t_intercept, double *t_overland,
-             double *t_infiltration,  double *t_diffusive, double *t_outlet);
+    void run(uint64_t kk, real_t dt, bool infiltrate_flag);
+
+    void profile_run(uint64_t kk, real_t dt,
+        bool infiltrate_flag, real_t *t_intercept,
+        real_t *t_overland,   real_t *t_infiltration,
+        real_t *t_diffusive,  real_t *t_outlet);
 
     Grid* getDEM() {
         return _dem;
@@ -156,3 +170,5 @@ class Engine {
 };
 
 #endif
+
+// @eof engine.h
