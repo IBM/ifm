@@ -1,0 +1,42 @@
+Usage: ./ifm_mpi <options>
+GENERAL options:
+    -h, --help                    This help.
+
+INPUT options:
+    -c, --cellsize=SIZE           DEM cell size, in meters (default: 90)
+    -d, --dem=FILE                DEM file
+    -l, --landuse=FILE            Landuse file
+    -L, --landuse-map=FILE        Landuse file (optional)
+    -m, --mask=FILE               Mask file
+    -o, --outlet=FILE             Outlet file
+    -O, --outdir=DIR              Output directory (default: ./)
+    -p, --precipitation=FILE      Precipitation file
+    -w, --watch=FILE              Optional list of coordinates to watch
+    -H, --soil-hc=FILE            Soil hydraulic conductivity file
+    -P, --soil-ph=FILE            Soil pressure head file
+    -E, --soil-ep=FILE            Soil effective porosity file
+
+SIMULATION options:
+    -b, --tbegin=NUM_SECONDS      Simulation start time (default: 0)
+    -f, --tfinal=NUM_SECONDS      Simulation end time (default: 1800)
+    -r, --output-rate=NUM_SECONDS How often to output depth files (default: 300)
+    -s, --tstep=NUM_SECONDS       Time step in seconds (default: 1)
+    -S, --state=FILE              Save/restore simulation state from the given file
+
+ENVIRONMENT options:
+    -R, --resourceMap=FILE        Resource map file (default: resources.map)
+
+UNIFORM precipitation file example:
+0    100
+3599 100
+3600 0
+
+NETCDF precipitation file example:
+0       wrfout_d04_2010-04-07_00:00:00
+600     wrfout_d04_2010-04-07_00:10:00
+1200    wrfout_d04_2010-04-07_00:20:00
+
+WATCH file example:
+# Lat Lon : Location name
+-81.584575 28.413437 : Walt Disney World
+
