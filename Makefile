@@ -9,9 +9,9 @@ HOSTNAME = galerkin
 #OPTFLAG =-O6 -DNDEBUG
 #OPTFLAG = -O6
 #OPTFLAG =-O2 -funswitch-loops -fpredictive-commoning -fgcse-after-reload -ftree-vectorize
-OPTFLAG = -g -O3 t
-OPTFLAG = -g -O3 -qstrict -qsmp=omp
-OPTFLAG = -g -O3 -fopenmp
+#OPTFLAG = -g -O3
+#OPTFLAG = -g -O3 -qstrict -qsmp=omp
+OPTFLAG = -fopenmp
 #OPTFLAG = -g -qsmp=omp -O3  
 #OPTFLAG = -O3 -fno-inline 
 
@@ -31,6 +31,12 @@ else
 endif
 
 CXX           = g++
+
+### in case of GNU C++ compiler, optimise for given CPU architecture
+ifeq ("$(CXX)","g++")
+  OPTFLAG += -march=native -O3
+endif
+
 HDRS          = $(wildcard *.h Core/*.h FileIO/*.h)
 OBJS          = $(patsubst %.C,%.o, $(wildcard *.C Core/*.C FileIO/*.C))
 NETCDF_LIBS   = -lnetcdf_c++ -lnetcdf
