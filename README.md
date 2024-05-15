@@ -23,7 +23,7 @@ Shared-memory version of IFM depends on
 
 * OpenMP
 * NetCDF C library
-* Modern NetCDF C++ library (libnetcdf_c++) v4.9.2 or later
+* Legacy NetCDF C++ library (netcdf-cxx 4.2.17)
 
 # Compiler Toolchain
 

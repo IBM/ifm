@@ -221,7 +221,7 @@ void WaterShed::SetStormDrain(uint64_t nout, uint64_t *xx, uint64_t *yy, real_t 
   }
 }
 
-// intercept
+// Computes intercept
 void WaterShed::CompIntercept(real_t dt) {
   uint64_t jj;
 
@@ -229,7 +229,7 @@ void WaterShed::CompIntercept(real_t dt) {
   #pragma omp parallel for default(shared) private(jj) 
 #endif
   for (jj=0; jj<_store_size; jj++) {
-    if ( _PRE[jj]*dt >= _RET[jj]) { 
+    if (_PRE[jj]*dt >= _RET[jj]) {
       _PRE[jj] -= _RET[jj]/dt;
       _RET[jj] = 0.0;
     } else {
@@ -239,7 +239,7 @@ void WaterShed::CompIntercept(real_t dt) {
    }
 }
 
-// calculate overland depth
+// Computes overland depth
 int WaterShed::CompOverlandDepth(real_t dt) {
   uint64_t jj;
   real_t dtdx2 = dt/(_gsz*_gsz);
@@ -250,10 +250,10 @@ int WaterShed::CompOverlandDepth(real_t dt) {
   for (jj=0; jj<_store_size; jj++) {
     _H[jj] += _OLR[jj]*dtdx2 + _PRE[jj]*dt; // should we worry about stability?
 
-    if ( _MASK[jj]==-1) _H[jj]=0.001;       // we take the water away at those boundary pixels
+    if (_MASK[jj]==-1) _H[jj]=0.001;       // we take the water away at those boundary pixels
 
-    if ( unlikely(_H[jj] < 0 )) {  // chicken
-      if (! _printed_depth_underflow) {
+    if (unlikely(_H[jj] < 0 )) {  // chicken
+      if (!_printed_depth_underflow) {
         printf("Possible numerical instability: %10ld: %.5e out of %5e\n", jj, _H[jj], _OLR[jj]);
         _printed_depth_underflow = true;
       }
@@ -262,8 +262,8 @@ int WaterShed::CompOverlandDepth(real_t dt) {
 
     // find the maximal depth and store it
     _MAXH[jj]  = _MAXH[jj] > _H[jj] ? _MAXH[jj] : _H[jj];
-    _VOL[jj]   = _MAXH[jj] * _gsz*_gsz;
-    _INTH[jj] += _H[jj]*dt;
+    _VOL[jj]   = _MAXH[jj] * _gsz * _gsz;
+    _INTH[jj] += _H[jj] * dt;
   }
 
   // Should call the infiltration routine next

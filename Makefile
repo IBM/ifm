@@ -3,7 +3,7 @@
 .PHONY: clean realclean
 
 USER     = mabalenk
-HOSTNAME = galerkin
+HOSTNAME = lobachevsky
 
 ### these flags can be modified
 #OPTFLAG =-O6 -DNDEBUG

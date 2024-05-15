@@ -123,9 +123,9 @@ void Engine::run(uint64_t kk, real_t dt, bool infiltrate_flag)
   _ws.CompOverlandDepth(dt);
 #ifndef ROUTING_ONLY
   if (infiltrate_flag && _soil_hc && _soil_ph && _soil_ep) {
-    printf("Entering infiltration stage...\n");
+    // printf("Entering infiltration stage...\n");
     _ws.CompInfiltration(dt);
-    printf("Exiting infiltration stage...\n");
+    // printf("Exiting infiltration stage...\n");
   }
 #endif
   _ws.CompDiffusiveRouting(dt);
@@ -158,9 +158,9 @@ void Engine::profile_run(uint64_t kk, real_t dt, bool infiltrate_flag,
 #ifndef ROUTING_ONLY
   if (infiltrate_flag && _soil_hc && _soil_ph && _soil_ep) {
     double t_infiltration_0 = omp_get_wtime();
-    printf("Entering infiltration stage...\n");
+    // printf("Entering infiltration stage...\n");
     _ws.CompInfiltration(dt);
-    printf("Exiting infiltration stage...\n");
+    // printf("Exiting infiltration stage...\n");
     *t_infiltration += (omp_get_wtime() - t_infiltration_0);
   }
 #endif
