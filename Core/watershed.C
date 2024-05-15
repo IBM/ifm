@@ -6,6 +6,7 @@
 #include <math.h>
 #include <float.h>
 #include <omp.h>
+#include <starpu.h>
 
 #include "watershed.h"
 
@@ -221,6 +222,85 @@ void WaterShed::SetStormDrain(uint64_t nout, uint64_t *xx, uint64_t *yy, real_t 
   }
 }
 
+// StarPU intercept kernel function for CPU execution
+void intercept_cpu_func(void *buffers[], void *cl_args) {
+
+    // retrive precipitation and retention vector handles
+    struct starpu_vector_interface *pre_h = (starpu_vector_interface*) buffers[0];
+    struct starpu_vector_interface *ret_h = (starpu_vector_interface*) buffers[1];
+
+    // obtain no. of elements and base pointer
+    unsigned  n = STARPU_VECTOR_GET_NX(pre_h);
+    real_t *pre = (real_t*) STARPU_VECTOR_GET_PTR(pre_h);
+    real_t *ret = (real_t*) STARPU_VECTOR_GET_PTR(ret_h);
+
+    // obtain dt as inline argument
+    real_t dt;
+    starpu_codelet_unpack_args(cl_args, &dt);
+    
+    for (unsigned i = 0; i < n; i++) {
+
+        if (pre[i]*dt >= ret[i]) {
+            pre[i] -= ret[i]/dt;
+            ret[i]  = 0.0;
+        }
+        else {
+            pre[i]  = 0.0;
+            ret[i] -= pre[i]*dt;
+        }
+    }
+}
+
+// StarPU codelet for computing intercept
+struct starpu_codelet intercept_cl {
+    .cpu_func = {intercept_cpu_func},
+    .nbuffers = 2,
+    .modes    = {STARPU_RW},
+};
+
+// Computes intercept
+// @note Uses StarPU for shared-memory parallelism
+void WaterShed::comp_intercept_starpu(real_t dt) {
+
+    size_t const NBLOCKS = 8;
+
+    // define StarPU data handles for precipitation and retention data arrays
+    starpu_data_handle_t pre_h, ret_h;
+
+    // register precipitation and retention arrays with StarPU
+    starpu_vector_data_register(&pre_h, 0, (uintptr_t)_PRE, _store_size, sizeof(_PRE[0]));
+    starpu_vector_data_register(&ret_h, 0, (uintptr_t)_RET, _store_size, sizeof(_RET[0]));
+
+    // divide precipitation and retention arrays into blocks
+    struct starpu_data_filter block_filter = {
+        .filter_func = starpu_vector_filter_block,
+        .nchildren   = NBLOCKS,
+    };
+
+    starpu_data_partition(pre_h, &block_filter);
+    starpu_data_partition(ret_h, &block_filter);
+
+    // for each block do: submit StarPU task non-blockingly
+    for (unsigned b = 0; b < NBLOCKS; b++) {
+
+        starpu_data_handle_t pre_nb_h = starpu_data_get_sub_data(pre_h, 1, b);
+        starpu_data_handle_t ret_nb_h = starpu_data_get_sub_data(ret_h, 1, b);
+
+        starpu_task_insert(&intercept_cl, STARPU_RW, pre_nb_h, STARPU_RW, ret_nb_h, STARPU_VALUE, &dt, sizeof(dt), 0);
+    }
+
+    // wait for all tasks submitted so far
+    starpu_task_wait_for_all();
+
+    // unpartition data
+    starpu_data_unpartition(pre_h, 0);
+    starpu_data_unpartition(ret_h, 0);
+
+    // unregister precipitation and retention arrays
+    starpu_data_unregister(pre_h);
+    starpu_data_unregister(ret_h);
+}
+
 // Computes intercept
 void WaterShed::CompIntercept(real_t dt) {
   uint64_t jj;
@@ -237,6 +317,38 @@ void WaterShed::CompIntercept(real_t dt) {
       _RET[jj] -= _PRE[jj]*dt;
     }
    }
+}
+
+// Computes overland depth
+// @note Uses StarPU for shared-memory parallelism
+int WaterShed::comp_overland_depth_starpu(real_t dt) {
+
+    real_t gsz2  = _gsz * _gsz;
+    real_t dtdx2 = dt / gsz2;
+
+    for (size_t i = 0; i < _store_size; i++) {
+
+        _H[i] += _OLR[i]*dtdx2 + _PRE[i]*dt;
+
+        // remove water @ boundary cells
+        if (_MASK[i] == -1) _H[i] = 0.001;
+
+        // check for underflow
+        if (unlikely(_H[i] < 0)) {
+            if (!_printed_depth_underflow) {
+                printf("Possible numerical instability: %10ld: %.5e out of %5e\n", i, _H[i], _OLR[i]);
+                _printed_depth_underflow = true;
+            }
+            _H[i] = real_sqrt(REAL_EPSILON);
+        }
+
+        // find maximum depth, store it
+        _MAXH[i]  = _MAXH[i] > _H[i] ? _MAXH[i] : _H[i];
+        _VOL[i]   = _MAXH[i] * gsz2;
+        _INTH[i] += _H[i] * dt;
+    }
+
+    return 0;
 }
 
 // Computes overland depth

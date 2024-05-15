@@ -118,7 +118,8 @@ void Engine::run(uint64_t kk, real_t dt, bool infiltrate_flag)
     _ws.SetPrecipitation(pp->data, _mmhr);
   }
 #ifndef ROUTING_ONLY
-  _ws.CompIntercept(dt);
+  // _ws.CompIntercept(dt);
+  _ws.comp_intercept_starpu(dt);
 #endif
   _ws.CompOverlandDepth(dt);
 #ifndef ROUTING_ONLY
@@ -149,7 +150,8 @@ void Engine::profile_run(uint64_t kk, real_t dt, bool infiltrate_flag,
   }
 #ifndef ROUTING_ONLY
   double t_intercept_0 = omp_get_wtime();
-  _ws.CompIntercept(dt);
+  // _ws.CompIntercept(dt);
+  _ws.comp_intercept_starpu(dt);
   *t_intercept += (omp_get_wtime() - t_intercept_0);
 #endif
   double t_overland_0  = omp_get_wtime();

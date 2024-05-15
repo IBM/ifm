@@ -5,8 +5,8 @@
  * @email  <main author's email>
  * @author  Maksims Abalenkovs
  * @email   maksims.abalenkovs@stfc.ac.uk
- * @date    Sep 20, 2023
- * @version 1.2
+ * @date    May 15, 2024
+ * @version 1.3
  */
 
 #include <stdio.h>
@@ -20,6 +20,7 @@
 #include <list>
 #include <libgen.h>
 #include <omp.h>
+#include <starpu.h>
 
 #include "watch.h"
 #include "engine.h"
@@ -408,6 +409,15 @@ int main(int argc, char* argv[]) {
   // Obtain no. of OpenMP threads requested
   printf("IFM will use %d OpenMP threads.\n", get_omp_nthr());
 
+  // Initialise StarPU runtime
+  int status = starpu_init(NULL);
+
+  if (status == -ENODEV) {
+      return 77;
+  }
+
+  STARPU_CHECK_RETURN_VALUE(status, "starpu_init");
+
   // Command line argument parsing
   OptionParser options(argc, argv);
   options.parse();
@@ -684,6 +694,9 @@ int main(int argc, char* argv[]) {
   }
 
   DELETE_OBJS();
+
+  // terminate StarPU
+  starpu_shutdown();
 
   return 0;
 }
