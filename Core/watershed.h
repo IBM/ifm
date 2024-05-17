@@ -248,6 +248,8 @@ class WaterShed {
   int  CompOutlet(real_t dt);
 
   void comp_intercept_starpu(real_t dt);
+  int  comp_overland_depth_starpu(real_t dt);
+  int  comp_infiltration_starpu(real_t dt);
 
   void DumpH(FILE *F, int nodata) {
     DUMP_TO_FILE(F, nodata, _H, fprintf);
