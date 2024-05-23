@@ -1,0 +1,25 @@
+===== IFM run of DEM =====
+Simulation performed on          		Fri Jul 14 18:02:48 2023
+
+Floating point type:             		DOUBLE
+
+DEM input file:                  		./input/DEM.nc
+Mask file:                       		GENERATED FROM DEM
+LandUse file:                    		./input/LandCover.nc
+Soil hydraulic conductivity:     		./input/SoilHydraulicConductivity.nc
+Soil pressure head:              		./input/SoilCapillaryHead.nc
+Soil effective porosity:         		./input/SoilEffectivePorosity.nc
+Soil moisture:                   		0.0
+Outlet file:                     		
+Precipitation file:              		./input/Precipitation.csv
+Output flow rate:                		NO
+Output depth:                    		YES
+Output max volume:               		NO
+Output OLR:                      		NO
+Output VSAT:                     		NO
+
+Simulation time step:            		1.0 sec
+Simulation Tstop:                		11400 sec
+Infiltration stage:              		YES
+Profile code:                    		YES
+Printing interval:               		3600 sec
