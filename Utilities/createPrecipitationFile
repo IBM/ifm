@@ -1,0 +1,26 @@
+#!/usr/bin/env python
+
+import os
+import sys
+
+# Specify the rate in which WRF outputs files (in seconds.)
+# That is typically either every 10 min, 30 min, or 1 hour.
+SIMULATION_SECONDS = 600
+
+def create(outputFile, netcdfFiles) :
+	# Create the precipitation file config
+	f = open(outputFile, "w")
+	for i in range(0, len(netcdfFiles)) :
+		if not os.path.isfile(netcdfFiles[i]) :
+			print "Error: %s is not a regular file" %netcdfFiles[i]
+			sys.exit(1)
+		f.write("%d %s\n" %(i * SIMULATION_SECONDS, netcdfFiles[i]))
+	f.close()
+
+if len(sys.argv) < 3 :
+	print "Syntax: %s <output.dat> <wrfout_file> [wrfout_file...]" %sys.argv[0]
+	sys.exit(1)
+
+outputFile = sys.argv[1]
+netcdfFiles = sorted(sys.argv[2:])
+create(outputFile, netcdfFiles)
