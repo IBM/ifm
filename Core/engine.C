@@ -129,7 +129,8 @@ void Engine::run(uint64_t kk, real_t dt, bool infiltrate_flag)
     _ws.comp_infiltration_starpu(dt);
   }
 #endif
-  _ws.CompDiffusiveRouting(dt);
+  // _ws.CompDiffusiveRouting(dt);
+  _ws.comp_diffusive_routing_starpu(dt);
   _ws.CompOutlet(dt);
 }
 
@@ -167,7 +168,8 @@ void Engine::profile_run(uint64_t kk, real_t dt, bool infiltrate_flag,
   }
 #endif
   double t_diffusive_0 = omp_get_wtime();
-  _ws.CompDiffusiveRouting(dt);
+  // _ws.CompDiffusiveRouting(dt);
+  _ws.comp_diffusive_routing_starpu(dt);
   *t_diffusive += (omp_get_wtime() - t_diffusive_0);
 
   double t_outlet_0 = omp_get_wtime();
