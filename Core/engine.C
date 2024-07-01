@@ -5,8 +5,8 @@
  * @email  <main author's email>
  * @author  Maksims Abalenkovs
  * @email   maksims.abalenkovs@stfc.ac.uk
- * @date    Jul 14, 2023
- * @version 1.1
+ * @date    Jul 1, 2024
+ * @version 1.2
  */
 
 #include <ctype.h>
@@ -129,9 +129,11 @@ void Engine::run(uint64_t kk, real_t dt, bool infiltrate_flag)
     _ws.comp_infiltration_starpu(dt);
   }
 #endif
-  // _ws.CompDiffusiveRouting(dt);
-  _ws.comp_diffusive_routing_starpu(dt);
-  _ws.CompOutlet(dt);
+  _ws.CompDiffusiveRouting(dt);
+  // _ws.comp_diffusive_routing_starpu(dt);
+  // _ws.CompOutlet(dt);
+  _ws.comp_outlet_starpu(dt);
+  _ws.comp_storm_starpu(dt);
 }
 
 void Engine::profile_run(uint64_t kk, real_t dt, bool infiltrate_flag,
@@ -168,12 +170,14 @@ void Engine::profile_run(uint64_t kk, real_t dt, bool infiltrate_flag,
   }
 #endif
   double t_diffusive_0 = omp_get_wtime();
-  // _ws.CompDiffusiveRouting(dt);
-  _ws.comp_diffusive_routing_starpu(dt);
+  _ws.CompDiffusiveRouting(dt);
+  // _ws.comp_diffusive_routing_starpu(dt);
   *t_diffusive += (omp_get_wtime() - t_diffusive_0);
 
   double t_outlet_0 = omp_get_wtime();
-  _ws.CompOutlet(dt);
+  // _ws.CompOutlet(dt);
+  _ws.comp_outlet_starpu(dt);
+  _ws.comp_storm_starpu(dt);
   *t_outlet += (omp_get_wtime() - t_outlet_0);
 }
 

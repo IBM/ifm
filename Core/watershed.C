@@ -1,4 +1,14 @@
-/* methods for watershed */
+/*
+ * @brief   Defines methods for watershed.
+ *
+ * @author <main author>
+ * @email  <main author's email>
+ * @author  Maksims Abalenkovs
+ * @email   maksims.abalenkovs@stfc.ac.uk
+ * @date    Jul 1, 2024
+ * @version 1.2
+ */
+
 #include <stdio.h>
 #include <assert.h>
 #include <stdlib.h>
@@ -659,6 +669,7 @@ int WaterShed::CompInfiltration(real_t dt) {
   return 0;
 }
 
+/*
 // StarPU diffusive routing kernel function for CPU execution
 void diffusive_routing_cpu_func(void *buffers[], void *cl_args) {
 
@@ -691,6 +702,7 @@ void diffusive_routing_cpu_func(void *buffers[], void *cl_args) {
 
     // kernel body
     // for (cur = 0; cur < (_nrow)*(_ncol); cur++) {
+    // @todo Devise strategy to deal with boundary elements
     for (cur = 0; cur < (_nrow)*(_ncol); cur++) {
 
         if (cur/_ncol < _nrow-1) {
@@ -929,6 +941,7 @@ int WaterShed::comp_diffusive_routing_starpu(real_t dt) {
     starpu_data_unregister(olrdim0_old_h);
     starpu_data_unregister(olrdim1_old_h);
 }
+*/
 
 // Computes diffusive routing
 int WaterShed::CompDiffusiveRouting(real_t dt) {
@@ -1067,6 +1080,284 @@ int WaterShed::CompDiffusiveRouting(real_t dt) {
   return 0;
 }
 
+// StarPU outlet kernel function for CPU execution
+void outlet_cpu_func(void *buffers[], void *cl_args) {
+
+    uint64_t jj;
+    uint64_t idx;
+
+    real_t qout;
+    real_t tt;
+
+    // retrieve vector handles
+    struct starpu_vector_interface *outlets_h    = (starpu_vector_interface*) buffers[0];
+    struct starpu_vector_interface *h_h          = (starpu_vector_interface*) buffers[1];
+    struct starpu_vector_interface *store_h      = (starpu_vector_interface*) buffers[2];
+    struct starpu_vector_interface *out_slopes_h = (starpu_vector_interface*) buffers[3];
+    struct starpu_vector_interface *n_h          = (starpu_vector_interface*) buffers[4];
+
+    // obtain no. of elements and base pointers
+    int _N_OUT = STARPU_VECTOR_GET_NX(outlets_h);
+
+    uint64_t *_OUTLETS  = (uint64_t*) STARPU_VECTOR_GET_PTR(outlets_h);     // _n_out
+    real_t *_H          = (real_t*)   STARPU_VECTOR_GET_PTR(h_h);           // _store_size
+    real_t *_STORE      = (real_t*)   STARPU_VECTOR_GET_PTR(store_h);       // _store_size
+    real_t *_OUT_SLOPES = (real_t*)   STARPU_VECTOR_GET_PTR(out_slopes_h);  // _n_out
+    real_t *_N          = (real_t*)   STARPU_VECTOR_GET_PTR(n_h);           // _store_size
+
+    // obtain _gsz, dtdx2, _printed_outlet_underflow as inline arguments
+    real_t _gsz, dtdx2;
+    bool _printed_outlet_underflow;
+    starpu_codelet_unpack_args(cl_args, &_gsz, &dtdx2, &_printed_outlet_underflow);
+
+    // kernel body
+    // for each outlet do
+    for (jj = 0; jj < _N_OUT; jj++) {
+
+        idx = _OUTLETS[jj];
+
+        if (_H[idx] > 0.0) {
+
+            tt   = _H[idx] - _STORE[idx];
+            qout = _gsz * real_sqrt(_OUT_SLOPES[jj])/_N[idx] * tt * real_cbrt(tt * tt);
+      
+            _H[idx] -= qout * dtdx2;
+      
+            if (unlikely(_H[idx] < 0)) {  // check
+                if (! _printed_outlet_underflow) {
+                    printf("too much water draw at outlet %ld\n", idx);
+                    _printed_outlet_underflow = true;
+                }
+
+                _H[idx] = 0.0;
+            }
+        }
+    }
+}
+
+// StarPU codelet for computing outlet
+struct starpu_codelet outlet_cl {
+    .cpu_func = {outlet_cpu_func},
+    .nbuffers = 5,
+    .modes    = {STARPU_R, STARPU_RW, STARPU_R, STARPU_R, STARPU_R},
+};
+
+// Computes outlet flow
+// @note Uses StarPU for shared-memory parallelism
+// @note h, store, n data arrays are _not_ divided into nblocks since their block size is different from outlets and out_slopes block size
+int WaterShed::comp_outlet_starpu(real_t dt) {
+
+    if (_N_OUT > 0) {
+
+        // number of StarPU blocks
+        // @todo change value in future
+        int const NBLOCKS = 1;
+    
+        // define StarPU handles for data arrays
+        starpu_data_handle_t outlets_h, h_h, store_h, out_slopes_h, n_h;
+    
+        // register data arrays with StarPU
+        starpu_vector_data_register(&outlets_h,    0, (uintptr_t)_OUTLETS,    _N_OUT,        sizeof(_OUTLETS[0]));
+        starpu_vector_data_register(&h_h,          0, (uintptr_t)_H,          _store_size, sizeof(_H[0]));
+        starpu_vector_data_register(&store_h,      0, (uintptr_t)_STORE,      _store_size, sizeof(_STORE[0]));
+        starpu_vector_data_register(&out_slopes_h, 0, (uintptr_t)_OUT_SLOPES, _N_OUT,        sizeof(_OUT_SLOPES[0]));
+        starpu_vector_data_register(&n_h,          0, (uintptr_t)_N,          _store_size, sizeof(_N[0]));
+    
+        // divide arrays into blocks
+        struct starpu_data_filter block_filter = {
+            .filter_func = starpu_vector_filter_block,
+            .nchildren   = NBLOCKS,
+        };
+    
+        starpu_data_partition(outlets_h,    &block_filter);
+        // starpu_data_partition(h_h,          &block_filter);
+        // starpu_data_partition(store_h,      &block_filter);
+        starpu_data_partition(out_slopes_h, &block_filter);
+        // starpu_data_partition(n_h,          &block_filter);
+    
+        real_t dtdx2 = dt/(_gsz*_gsz);
+    
+        // for each _outlet_ block do: submit StarPU tasks non-blockingly
+        for (int b = 0; b < NBLOCKS; b++) {
+    
+            // obtain handles for _outlet_ blocks
+            starpu_data_handle_t outlets_nb_h    = starpu_data_get_sub_data(outlets_h,    1, b);
+            // starpu_data_handle_t h_nb_h          = starpu_data_get_sub_data(h_h,          1, b);
+            // starpu_data_handle_t store_nb_h      = starpu_data_get_sub_data(store_h,      1, b);
+            starpu_data_handle_t out_slopes_nb_h = starpu_data_get_sub_data(out_slopes_h, 1, b);
+            // starpu_data_handle_t n_nb_h          = starpu_data_get_sub_data(n_h,          1, b);
+    
+            starpu_task_insert(
+                &outlet_cl,
+                STARPU_R,  outlets_nb_h,
+                STARPU_RW, h_h,
+                STARPU_R,  store_h,
+                STARPU_R,  out_slopes_nb_h,
+                STARPU_R,  n_h,
+                STARPU_VALUE, &_gsz,  sizeof(_gsz),
+                STARPU_VALUE, &dtdx2, sizeof(dtdx2),
+                STARPU_VALUE, &_printed_outlet_underflow, sizeof(_printed_outlet_underflow),
+                0);
+        }
+    
+        // wait for all tasks submitted so far
+        starpu_task_wait_for_all();
+    
+        // unpartition data
+        starpu_data_unpartition(outlets_h,    0);
+        // starpu_data_unpartition(h_h,          0);
+        // starpu_data_unpartition(store_h,      0);
+        starpu_data_unpartition(out_slopes_h, 0);
+        // starpu_data_unpartition(n_h,          0);
+    
+        // unregister data arrays
+        starpu_data_unregister(outlets_h);
+        starpu_data_unregister(h_h);
+        starpu_data_unregister(store_h);
+        starpu_data_unregister(out_slopes_h);
+        starpu_data_unregister(n_h);
+    }
+
+    return 0;
+}
+
+// StarPU storm kernel function for CPU execution
+void storm_cpu_func(void *buffers[], void *cl_args) {
+
+    uint64_t jj;
+    uint64_t idx;
+
+    real_t qout;
+
+    // retrieve vector handles
+    struct starpu_vector_interface *sd_h         = (starpu_vector_interface*) buffers[0];
+    struct starpu_vector_interface *h_h          = (starpu_vector_interface*) buffers[1];
+    struct starpu_vector_interface *saturation_h = (starpu_vector_interface*) buffers[2];
+    struct starpu_vector_interface *rate_h       = (starpu_vector_interface*) buffers[3];
+    struct starpu_vector_interface *threshold_h  = (starpu_vector_interface*) buffers[4];
+    struct starpu_vector_interface *store_h      = (starpu_vector_interface*) buffers[5];
+
+    // obtain no. of elements and base pointers
+    int _N_STORM = STARPU_VECTOR_GET_NX(sd_h);
+
+    uint64_t *_SD       = (uint64_t*) STARPU_VECTOR_GET_PTR(sd_h);          // _n_out
+    real_t *_H          = (real_t*)   STARPU_VECTOR_GET_PTR(h_h);           // _store_size
+    real_t *_saturation = (real_t*)   STARPU_VECTOR_GET_PTR(saturation_h);  // _store_size
+    real_t *_rate       = (real_t*)   STARPU_VECTOR_GET_PTR(rate_h);        // _n_out
+    real_t *_threshold  = (real_t*)   STARPU_VECTOR_GET_PTR(threshold_h);   // _n_out
+    real_t *_STORE      = (real_t*)   STARPU_VECTOR_GET_PTR(store_h);       // _store_size
+
+    // obtain dtdx2 as inline argument
+    real_t dtdx2;
+    starpu_codelet_unpack_args(cl_args, &dtdx2);
+
+    // kernel body
+    // for each storm do
+    for (jj = 0; jj < _N_STORM; jj++) {
+
+        idx = _SD[jj];
+
+        if (_H[idx] > _saturation[jj]) {
+            qout = _rate[jj] * real_pow(_saturation[jj] - _threshold[jj] - _STORE[idx], EIGHT3RD);
+        }
+        else if (_H[ idx] > _threshold[jj]) {
+            qout = _rate[jj] * real_pow(_H[idx] - _threshold[jj] - _STORE[idx], EIGHT3RD);
+        }
+        else {
+          qout = 0;
+        }
+
+        _H[idx] -= qout * dtdx2;
+    }
+}
+
+// StarPU codelet for computing storm
+struct starpu_codelet storm_cl {
+    .cpu_func = {storm_cpu_func},
+    .nbuffers = 6,
+    .modes    = {STARPU_R, STARPU_RW, STARPU_R, STARPU_R, STARPU_R, STARPU_R},
+};
+
+// Computes storm flow
+// @note Uses StarPU for shared-memory parallelism
+// @note h, threshold, store data arrays are _not_ divided into nblocks since their block size is different from outlets and out_slopes block size
+int WaterShed::comp_storm_starpu(real_t dt) {
+
+    if (_N_STORM > 0) {
+
+        // number of StarPU blocks
+        // @todo change value in future
+        int const NBLOCKS = 1;
+    
+        // define StarPU handles for data arrays
+        starpu_data_handle_t sd_h, h_h, saturation_h, threshold_h, store_h, rate_h;
+    
+        // register data arrays with StarPU
+        starpu_vector_data_register(&sd_h,         0, (uintptr_t)_SD,         _N_OUT,      sizeof(_SD[0]));
+        starpu_vector_data_register(&h_h,          0, (uintptr_t)_H,          _store_size, sizeof(_H[0]));
+        starpu_vector_data_register(&saturation_h, 0, (uintptr_t)_saturation, _N_OUT,      sizeof(_saturation[0]));
+        starpu_vector_data_register(&threshold_h,  0, (uintptr_t)_threshold,  _store_size, sizeof(_threshold[0]));
+        starpu_vector_data_register(&store_h,      0, (uintptr_t)_STORE,      _store_size, sizeof(_STORE[0]));
+        starpu_vector_data_register(&rate_h,       0, (uintptr_t)_rate,       _N_OUT,      sizeof(_rate[0]));
+    
+        // divide arrays into blocks
+        struct starpu_data_filter block_filter = {
+            .filter_func = starpu_vector_filter_block,
+            .nchildren   = NBLOCKS,
+        };
+    
+        starpu_data_partition(sd_h,         &block_filter);
+        // starpu_data_partition(h_h,          &block_filter);
+        starpu_data_partition(saturation_h, &block_filter);
+        // starpu_data_partition(threshold_h,  &block_filter);
+        // starpu_data_partition(store_h,      &block_filter);
+        starpu_data_partition(rate_h,       &block_filter);
+    
+        real_t dtdx2 = dt/(_gsz*_gsz);
+    
+        // for each _storm_ block do: submit StarPU tasks non-blockingly
+        for (int b = 0; b < NBLOCKS; b++) {
+    
+            // obtain handles for _storm_ blocks
+            starpu_data_handle_t sd_nb_h         = starpu_data_get_sub_data(sd_h,         1, b);
+            starpu_data_handle_t saturation_nb_h = starpu_data_get_sub_data(saturation_h, 1, b);
+            starpu_data_handle_t rate_nb_h       = starpu_data_get_sub_data(rate_h,       1, b);
+    
+            starpu_task_insert(
+                &storm_cl,
+                STARPU_R,  sd_nb_h,
+                STARPU_RW, h_h,
+                STARPU_R,  saturation_nb_h,
+                STARPU_R,  rate_nb_h,
+                STARPU_R,  threshold_h,
+                STARPU_R,  store_h,
+                STARPU_VALUE, &dtdx2, sizeof(dtdx2),
+                0);
+        }
+    
+        // wait for all tasks submitted so far
+        starpu_task_wait_for_all();
+    
+        // unpartition data
+        starpu_data_unpartition(sd_h,         0);
+        // starpu_data_unpartition(h_h,          0);
+        starpu_data_unpartition(saturation_h, 0);
+        starpu_data_unpartition(rate_h,       0);
+        // starpu_data_unpartition(threshold_h,  0);
+        // starpu_data_unpartition(store_h,      0);
+    
+        // unregister data arrays
+        starpu_data_unregister(sd_h);
+        starpu_data_unregister(h_h);
+        starpu_data_unregister(saturation_h);
+        starpu_data_unregister(rate_h);
+        starpu_data_unregister(threshold_h);
+        starpu_data_unregister(store_h);
+    }
+
+    return 0;
+}
+
 // outlet flow, this is will not work well in openMP since we are not expecting many outlets
 int WaterShed::CompOutlet(real_t dt) {
   uint64_t jj;
@@ -1082,7 +1373,7 @@ int WaterShed::CompOutlet(real_t dt) {
     idx = _OUTLETS[jj];
     if ( _H[ idx ] > 0.0 ) {
       tt = _H[idx]-_STORE[idx];
-      qout = _gsz * real_sqrt( _OUT_SLOPES[jj])/_N[idx] * tt * real_cbrt(tt * tt);
+      qout = _gsz * real_sqrt(_OUT_SLOPES[jj])/_N[idx] * tt * real_cbrt(tt * tt);
 
       _H[ idx ] -= qout * dtdx2;
 
@@ -1107,7 +1398,7 @@ int WaterShed::CompOutlet(real_t dt) {
     } else {
       qout = 0;
     }
-    _H[idx ] -= qout *dtdx2;
+    _H[idx] -= qout * dtdx2;
   }
 
   // more bookkeeping might be needed here
@@ -1115,4 +1406,4 @@ int WaterShed::CompOutlet(real_t dt) {
   return 0;
 }
 
-/* end */
+// @eof watershed.C
