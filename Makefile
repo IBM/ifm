@@ -30,7 +30,7 @@ else
   BITS = -m64
 endif
 
-CXX           = g++
+CXX = g++
 
 ### in case of GNU C++ compiler, optimise for given CPU architecture
 ifeq ("$(CXX)","g++")
