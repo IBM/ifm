@@ -10,9 +10,9 @@ This repository branch contains shared-memory version of the Integrated Flood Mo
 
 Shared-memory version of IFM depends on
 
-* OpenMP
-* NetCDF C library
-* Legacy NetCDF C++ library ([netcdf-cxx 4.2.17](https://downloads.unidata.ucar.edu/netcdf-cxx/4.2/netcdf-cxx-4.2.tar.gz))
+* [OpenMP](https://www.openmp.org)
+* [NetCDF C library](https://downloads.unidata.ucar.edu/netcdf)
+* [Legacy NetCDF C++ library](https://downloads.unidata.ucar.edu/netcdf) ([netcdf-cxx 4.2.17](https://downloads.unidata.ucar.edu/netcdf-cxx/4.2/netcdf-cxx-4.2.tar.gz))
 
 
  Compiler Toolchain
