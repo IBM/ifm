@@ -105,7 +105,12 @@ void Engine::setup()
     _ws.SetSoil(_soil_hc->data, 1.0/_cmhr, _soil_ph->data, 1.0/_cm2m, _soil_ep->data, 1.0, _soilMoisture->data);
 }
 
-void Engine::run(uint64_t kk, real_t dt, bool infiltrate_flag)
+// @brief Executes IFM computation engine at given time instant
+// @param[in] kk time step
+// @param[in] nb no. of StarPU blocks
+// @param[in] dt time increment
+// @param[in] infiltrate_flag switch to enable or disable infiltration stage
+void Engine::run(uint64_t kk, uint32_t nb, real_t dt, bool infiltrate_flag)
 {
   // uint64_t pre_cntr = (uint64_t)(pre_window/dt);
 
@@ -120,7 +125,7 @@ void Engine::run(uint64_t kk, real_t dt, bool infiltrate_flag)
   }
 #ifndef ROUTING_ONLY
   _ws.CompIntercept(dt);
-  // _ws.comp_intercept_starpu(dt);
+  // _ws.comp_intercept_starpu(nb, dt);
 #endif
   _ws.CompOverlandDepth(dt);
   // _ws.comp_overland_depth_starpu(dt);
@@ -137,7 +142,13 @@ void Engine::run(uint64_t kk, real_t dt, bool infiltrate_flag)
   // _ws.comp_storm_starpu(dt);
 }
 
-void Engine::profile_run(uint64_t kk, real_t dt, bool infiltrate_flag,
+// @brief Executes IFM computation engine at given time instant
+// @note Uses StarPU timing routines to measure execution time of each IFM computation phase
+// @param[in] kk time step
+// @param[in] nb no. of StarPU blocks
+// @param[in] dt time increment
+// @param[in] infiltrate_flag switch to enable or disable infiltration stage
+void Engine::profile_run(uint64_t kk, uint32_t nb, real_t dt, bool infiltrate_flag,
     real_t *t_intercept, real_t *t_overland, real_t *t_infiltration,
     real_t *t_diffusive, real_t *t_outlet)
 {
@@ -155,7 +166,7 @@ void Engine::profile_run(uint64_t kk, real_t dt, bool infiltrate_flag,
 #ifndef ROUTING_ONLY
   double t_intercept_0 = starpu_timing_now();
   _ws.CompIntercept(dt);
-  // _ws.comp_intercept_starpu(dt);
+  // _ws.comp_intercept_starpu(nb, dt);
   *t_intercept += (starpu_timing_now() - t_intercept_0);
 #endif
   double t_overland_0  = starpu_timing_now();

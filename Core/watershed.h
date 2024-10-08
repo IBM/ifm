@@ -15,11 +15,12 @@
 #define _WATERSHED_H
 
 #include <assert.h>
-#include <stdio.h>
 #include <stdint.h>
+#include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 #include <zlib.h>
+
 #include "ifm_common.h"
 
 // Macros for branch prediction hints
@@ -254,7 +255,7 @@ class WaterShed {
   int  CompDiffusiveRouting(real_t dt);
   int  CompOutlet(real_t dt);
 
-  void comp_intercept_starpu(real_t dt);
+  void comp_intercept_starpu(uint32_t nb, real_t dt);
   int  comp_overland_depth_starpu(real_t dt);
   int  comp_infiltration_starpu(real_t dt);
   int  comp_diffusive_routing_starpu(real_t dt);

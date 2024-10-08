@@ -368,6 +368,12 @@ void dumpInformation(const char *fname, const char *base, int ismaskgen, OptionP
 } while(0)
 
 int main(int argc, char* argv[]) {
+
+  // StarPU
+  // no. of StarPU blocks
+  // @todo change for higher performance
+  uint64_t const NB = 8;
+
   // File I/O
   precip_table *pt=NULL;
   FILE         *F=NULL;
@@ -577,12 +583,12 @@ int main(int argc, char* argv[]) {
 
     // launch computation engine
     if (options.profile_flag) {
-        engine.profile_run(kk, dt, options.infiltrate_flag,
+        engine.profile_run(kk, NB, dt, options.infiltrate_flag,
             &t_intercept, &t_overland, &t_infiltration,
             &t_diffusive, &t_outlet);
     }
     else {
-        engine.run(kk, dt, options.infiltrate_flag);
+        engine.run(kk, NB, dt, options.infiltrate_flag);
     }
     rotating_wheel();
 

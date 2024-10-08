@@ -10,13 +10,13 @@
  * @version 1.4
  */
 
-#include <stdio.h>
 #include <assert.h>
+#include <float.h>
+#include <math.h>
+#include <starpu.h>
+#include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
-#include <math.h>
-#include <float.h>
-#include <starpu.h>
 
 #include "watershed.h"
 
@@ -226,7 +226,9 @@ void WaterShed::SetStormDrain(uint64_t nout, uint64_t *xx, uint64_t *yy, real_t 
   }
 }
 
-// StarPU intercept kernel function for CPU execution
+// @brief StarPU intercept kernel function for CPU execution
+// @param[in] buffers pointer to array of StarPU vector interfaces
+// @param[in] cl_args array of StarPU inline arguments
 void intercept_cpu_func(void *buffers[], void *cl_args) {
 
     // retrive precipitation and retention vector handles
@@ -234,24 +236,24 @@ void intercept_cpu_func(void *buffers[], void *cl_args) {
     struct starpu_vector_interface *ret_h = (starpu_vector_interface*) buffers[1];
 
     // obtain no. of elements and base pointers
-    int n = STARPU_VECTOR_GET_NX(pre_h);
-    real_t *pre = (real_t*) STARPU_VECTOR_GET_PTR(pre_h);
-    real_t *ret = (real_t*) STARPU_VECTOR_GET_PTR(ret_h);
+    int _store_size = STARPU_VECTOR_GET_NX(pre_h);
+    real_t *_PRE = (real_t*) STARPU_VECTOR_GET_PTR(pre_h);
+    real_t *_RET = (real_t*) STARPU_VECTOR_GET_PTR(ret_h);
 
-    // obtain dt as inline argument
+    // obtain time increment as inline argument
     real_t dt;
     starpu_codelet_unpack_args(cl_args, &dt);
     
     // kernel body
-    for (int i = 0; i < n; i++) {
+    for (int jj = 0; jj < _store_size; jj++) {
 
-        if (pre[i]*dt >= ret[i]) {
-            pre[i] -= ret[i]/dt;
-            ret[i]  = 0.0;
+        if (_PRE[jj]*dt >= _RET[jj]) {
+            _PRE[jj] -= _RET[jj]/dt;
+            _RET[jj]  = 0.0;
         }
         else {
-            pre[i]  = 0.0;
-            ret[i] -= pre[i]*dt;
+            _PRE[jj]  = 0.0;
+            _RET[jj] -= _PRE[jj]*dt;
         }
     }
 }
@@ -263,13 +265,10 @@ struct starpu_codelet intercept_cl {
     .modes    = {STARPU_RW, STARPU_RW},
 };
 
-// Computes intercept
-// @note Uses StarPU for shared-memory parallelism
-void WaterShed::comp_intercept_starpu(real_t dt) {
-
-    // number of StarPU blocks
-    // @todo change value in future
-    int const NBLOCKS = 8;
+// @brief Computes intercept
+// @param[in] nb no. of StarPU blocks
+// @param[in] dt time increment
+void WaterShed::comp_intercept_starpu(uint32_t nb, real_t dt) {
 
     // define StarPU handles for precipitation and retention data arrays
     starpu_data_handle_t pre_h, ret_h;
@@ -281,14 +280,14 @@ void WaterShed::comp_intercept_starpu(real_t dt) {
     // divide data arrays into blocks
     struct starpu_data_filter block_filter = {
         .filter_func = starpu_vector_filter_block,
-        .nchildren   = NBLOCKS,
+        .nchildren   = nb,
     };
 
     starpu_data_partition(pre_h, &block_filter);
     starpu_data_partition(ret_h, &block_filter);
 
     // for each block do: submit StarPU tasks non-blockingly
-    for (int b = 0; b < NBLOCKS; b++) {
+    for (int b = 0; b < nb; b++) {
 
         // obtain handles for blocks
         starpu_data_handle_t pre_nb_h = starpu_data_get_sub_data(pre_h, 1, b);
@@ -319,7 +318,6 @@ void WaterShed::comp_intercept_starpu(real_t dt) {
 void WaterShed::CompIntercept(real_t dt) {
   uint64_t jj;
 
-  // @todo (omp->xpu) parallelise with StarPU
   for (jj=0; jj<_store_size; jj++) {
     if (_PRE[jj]*dt >= _RET[jj]) {
       _PRE[jj] -= _RET[jj]/dt;

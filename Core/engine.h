@@ -1,12 +1,13 @@
 /*
  * @brief   Declares functions for top level simulation driver.
+ * @note    StarPU powers shared-memory parallelism.
  *
  * @author <main author>
  * @email  <main author's email>
  * @author  Maksims Abalenkovs
  * @email   maksims.abalenkovs@stfc.ac.uk
- * @date    Jul 14, 2023
- * @version 1.1
+ * @date    Oct 8, 2024
+ * @version 1.4
  */
 
 #ifndef __ENGINE_H
@@ -16,9 +17,10 @@
 #include <stdio.h>
 #include <string>
 #include <zlib.h>
+
+#include "grid.h"
 #include "ifm_common.h"
 #include "watershed.h"
-#include "grid.h"
 
 using namespace std;
 class precip_table;
@@ -132,9 +134,9 @@ class Engine {
 
     void setup();
 
-    void run(uint64_t kk, real_t dt, bool infiltrate_flag);
+    void run(uint64_t kk, uint32_t nb, real_t dt, bool infiltrate_flag);
 
-    void profile_run(uint64_t kk, real_t dt,
+    void profile_run(uint64_t kk, uint32_t nb, real_t dt,
         bool infiltrate_flag, real_t *t_intercept,
         real_t *t_overland,   real_t *t_infiltration,
         real_t *t_diffusive,  real_t *t_outlet);
