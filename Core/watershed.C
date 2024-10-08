@@ -1,12 +1,13 @@
 /*
  * @brief   Defines methods for watershed.
+ * @note    StarPU powers shared-memory parallelism.
  *
  * @author <main author>
  * @email  <main author's email>
  * @author  Maksims Abalenkovs
  * @email   maksims.abalenkovs@stfc.ac.uk
- * @date    Jul 3, 2024
- * @version 1.3
+ * @date    Oct 8, 2024
+ * @version 1.4
  */
 
 #include <stdio.h>
@@ -15,7 +16,6 @@
 #include <string.h>
 #include <math.h>
 #include <float.h>
-#include <omp.h>
 #include <starpu.h>
 
 #include "watershed.h"
@@ -105,9 +105,7 @@ void WaterShed::Init(real_t *elevation, short *mask, real_t *lakes, real_t *init
   memset(_minTy, 0, _store_size*sizeof(real_t));
 
   uint64_t jj;
-#ifdef PARA //yh@June 27th
-  #pragma omp parallel for default(shared) private(jj)
-#endif
+  // @todo (omp->xpu) parallelise with StarPU
   for (jj=0; jj<_store_size; jj++) {
     // quickly go over the mask, set values to NAN if not within mask
     if ( !_MASK[jj] ) _ELE[jj] = NAN;
@@ -128,9 +126,7 @@ void WaterShed::SetN(short *idx_n, real_t *nvals, real_t *retcoef, uint64_t nval
 
   // this could be slow, and uses memory
   // but we want to trade in for the runtime efficiency
-#ifdef PARA //yh@June 27th
-  #pragma omp parallel for default(shared) private(jj)
-#endif
+  // @todo (omp->xpu) parallelise with StarPU
   for (jj=0; jj<_store_size; jj++) {
     assert( _IDX_N[jj] >= 0 );
     if ((uint64_t) _IDX_N[jj] >= nvals_size) {
@@ -177,9 +173,7 @@ void WaterShed::SetSoil(real_t *soil_hc, real_t f1, real_t *soil_ph, real_t f2, 
   // we are not going to use this array
   memset(_IDX_SOIL, 0, _store_size*sizeof(short));
 
-#ifdef PARA //yh@June 27th
-  #pragma omp parallel for default(shared) private(jj)
-#endif
+  // @todo (omp->xpu) parallelise with StarPU
   for (jj=0; jj<_store_size; jj++) {
     _HCON[jj] = soil_hc[jj]*f1;  // scaling and copying only 
     _P2[jj] = soil_ph[jj]*soil_ep[jj]*f2*f3; // product of the two, plus the scaling factor 
@@ -325,9 +319,7 @@ void WaterShed::comp_intercept_starpu(real_t dt) {
 void WaterShed::CompIntercept(real_t dt) {
   uint64_t jj;
 
-#ifdef PARA //yh@June 27th
-  #pragma omp parallel for default(shared) private(jj) 
-#endif
+  // @todo (omp->xpu) parallelise with StarPU
   for (jj=0; jj<_store_size; jj++) {
     if (_PRE[jj]*dt >= _RET[jj]) {
       _PRE[jj] -= _RET[jj]/dt;
@@ -492,9 +484,7 @@ int WaterShed::CompOverlandDepth(real_t dt) {
   uint64_t jj;
   real_t dtdx2 = dt/(_gsz*_gsz);
 
-#ifdef PARA //yh@June 27th
-  #pragma omp parallel for default(shared) private(jj) 
-#endif
+  // @todo (omp->xpu) parallelise with StarPU
   for (jj=0; jj<_store_size; jj++) {
     _H[jj] += _OLR[jj]*dtdx2 + _PRE[jj]*dt; // should we worry about stability?
 
@@ -645,9 +635,7 @@ int WaterShed::CompInfiltration(real_t dt) {
   real_t two_dt = 2.0*dt;
   real_t tmpinf;
 
-#ifdef PARA //yh@June 27th
-  #pragma omp parallel for default(shared) private(jj,tmpinf) 
-#endif
+  // @todo (omp->xpu) parallelise with StarPU
   for (jj=0; jj<_store_size; jj++) {
 
     // tmpinf = hcon * dt - 2*vsat
@@ -991,9 +979,7 @@ int WaterShed::CompDiffusiveRouting(real_t dt) {
   real_t curfabs,oldfabs;
   int64_t mysign;
 
-#ifdef PARA //yh@June 27th
-  #pragma omp parallel for default(shared) private(cur,top,rgt,tmpsf,tmpn,tmph,tmpp,OLRDIM0,OLRDIM1,mysign,curfabs,oldfabs) 
-#endif
+  // @todo (omp->xpu) parallelise with StarPU
   for (cur=0; cur<(_nrow)*(_ncol); cur++) {
     if (cur/_ncol < _nrow-1) {
       top = cur+_ncol;

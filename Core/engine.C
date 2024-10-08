@@ -1,25 +1,26 @@
 /*
  * @brief   Defines top level simulation driver.
+ * @note    StarPU powers shared-memory parallelism.
  *
  * @author <main author>
  * @email  <main author's email>
  * @author  Maksims Abalenkovs
  * @email   maksims.abalenkovs@stfc.ac.uk
- * @date    Jul 1, 2024
- * @version 1.2
+ * @date    Oct 8, 2024
+ * @version 1.4
  */
 
 #include <ctype.h>
 #include <errno.h>
 #include <math.h>
-#include <omp.h>
+#include <starpu.h>
+#include <stdbool.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <sys/stat.h>
 #include <time.h>
 #include <unistd.h>
 #include <zlib.h>
-#include <stdbool.h>
 
 #include "engine.h"
 #include "filter.h"
@@ -152,33 +153,33 @@ void Engine::profile_run(uint64_t kk, real_t dt, bool infiltrate_flag,
     _ws.SetPrecipitation(pp->data, _mmhr);
   }
 #ifndef ROUTING_ONLY
-  double t_intercept_0 = omp_get_wtime();
+  double t_intercept_0 = starpu_timing_now();
   // _ws.CompIntercept(dt);
   _ws.comp_intercept_starpu(dt);
-  *t_intercept += (omp_get_wtime() - t_intercept_0);
+  *t_intercept += (starpu_timing_now() - t_intercept_0);
 #endif
-  double t_overland_0  = omp_get_wtime();
+  double t_overland_0  = starpu_timing_now();
   // _ws.CompOverlandDepth(dt);
   _ws.comp_overland_depth_starpu(dt);
-  *t_overland += (omp_get_wtime() - t_overland_0);
+  *t_overland += (starpu_timing_now() - t_overland_0);
 #ifndef ROUTING_ONLY
   if (infiltrate_flag && _soil_hc && _soil_ph && _soil_ep) {
-    double t_infiltration_0 = omp_get_wtime();
+    double t_infiltration_0 = starpu_timing_now();
     // _ws.CompInfiltration(dt);
     _ws.comp_infiltration_starpu(dt);
-    *t_infiltration += (omp_get_wtime() - t_infiltration_0);
+    *t_infiltration += (starpu_timing_now() - t_infiltration_0);
   }
 #endif
-  double t_diffusive_0 = omp_get_wtime();
+  double t_diffusive_0 = starpu_timing_now();
   _ws.CompDiffusiveRouting(dt);
   // _ws.comp_diffusive_routing_starpu(dt);
-  *t_diffusive += (omp_get_wtime() - t_diffusive_0);
+  *t_diffusive += (starpu_timing_now() - t_diffusive_0);
 
-  double t_outlet_0 = omp_get_wtime();
+  double t_outlet_0 = starpu_timing_now();
   // _ws.CompOutlet(dt);
   _ws.comp_outlet_starpu(dt);
   _ws.comp_storm_starpu(dt);
-  *t_outlet += (omp_get_wtime() - t_outlet_0);
+  *t_outlet += (starpu_timing_now() - t_outlet_0);
 }
 
 // @eof engine.C

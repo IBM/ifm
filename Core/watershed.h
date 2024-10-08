@@ -1,4 +1,15 @@
-/* definition in one water shed */
+/*
+ * @brief   Defines one water shed.
+ * @note    StarPU powers shared-memory parallelism.
+ *
+ * @author <main author>
+ * @email  <main author's email>
+ * @author  Maksims Abalenkovs
+ * @email   maksims.abalenkovs@stfc.ac.uk
+ * @date    Oct 8, 2024
+ * @version 1.4
+ */
+
 
 #ifndef _WATERSHED_H
 #define _WATERSHED_H
@@ -225,18 +236,14 @@ class WaterShed {
   void SetPrecipitation(real_t *pa, real_t div) { 
     uint64_t jj;
     assert(pa); 
-#ifdef PARA			//yh@June 27th
-#pragma omp parallel for default(shared) private(jj)
-#endif
+  // @todo (omp->xpu) parallelise with StarPU
     for(jj=0;jj<_store_size; jj++) 
       _PRE[jj]=pa[jj]/div; 
   }
 
   void SetPrecipitation(real_t prep) {
     uint64_t jj;
-#ifdef PARA			//yh@June 27th
-#pragma omp parallel for default(shared) private(jj)
-#endif
+  // @todo (omp->xpu) parallelise with StarPU
     for(jj=0;jj<_store_size; jj++) 
       _PRE[jj]=prep;
   }

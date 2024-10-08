@@ -1,12 +1,13 @@
 /*
  * @brief   Defines main workflow of IFM algorithm.
+ * @note    StarPU powers shared-memory parallelism.
  *
  * @author <main author>
  * @email  <main author's email>
  * @author  Maksims Abalenkovs
  * @email   maksims.abalenkovs@stfc.ac.uk
- * @date    May 15, 2024
- * @version 1.3
+ * @date    Oct 8, 2024
+ * @version 1.4
  */
 
 #include <stdio.h>
@@ -19,7 +20,6 @@
 #include <sys/stat.h>
 #include <list>
 #include <libgen.h>
-#include <omp.h>
 #include <starpu.h>
 
 #include "watch.h"
@@ -367,22 +367,6 @@ void dumpInformation(const char *fname, const char *base, int ismaskgen, OptionP
     (objdata)[jj] *= val; \
 } while(0)
 
-// Obtain number of OpenMP threads requested
-int get_omp_nthr(void) {
-
-    int nthr = 1;
-
-    #pragma omp parallel
-    {
-        #pragma omp single
-        {
-            nthr = omp_get_num_threads();
-        }
-    }
-
-    return nthr;
-}
-
 int main(int argc, char* argv[]) {
   // File I/O
   precip_table *pt=NULL;
@@ -405,9 +389,6 @@ int main(int argc, char* argv[]) {
   uint64_t     *out_x=NULL, *out_y=NULL;
   real_t       *out_s=NULL;
   uint64_t      num_outlets=0;
-
-  // Obtain no. of OpenMP threads requested
-  printf("IFM will use %d OpenMP threads.\n", get_omp_nthr());
 
   // Initialise StarPU runtime
   int status = starpu_init(NULL);

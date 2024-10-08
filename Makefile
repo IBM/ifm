@@ -14,14 +14,16 @@ HOSTNAME = lobachevsky
 #OPTFLAG = -g -qsmp=omp -O3  
 #OPTFLAG = -O3 -fno-inline 
 #OPTFLAG = -Xclang -fopenmp
-OPTFLAG = -O3 -fopenmp
+#OPTFLAG = -O3 -fopenmp  # OpenMP is enabled
+OPTFLAG = -O3  # OpenMP is disabled
 
 ### options to change the behavior of the code
 #OPTIONS = -DLIM_METHOD1 -DLIM_METHOD2 -DPRE_FILTER -DENABLE_MPI  -DRANGE -D
 #OPTIONS = -DLIM_METHOD1 -DLIM_METHOD2 -DPRE_FILTER -DENABLE_MPI -DDEBUG 
 #OPTIONS = -DLIM_METHOD1 -DLIM_METHOD2 -DPRE_FILTER 
 #OPTIONS = -DLIM_METHOD1 -DLIM_METHOD2 -DROUTING_ONLY
-OPTIONS = -DLIM_METHOD1 -DLIM_METHOD2 -DPRE_FILTER -DPARA
+#OPTIONS = -DLIM_METHOD1 -DLIM_METHOD2 -DPRE_FILTER -DPARA  # OpenMP is enabled
+OPTIONS = -DLIM_METHOD1 -DLIM_METHOD2 -DPRE_FILTER  # OpenMP is disabled
 
 ### if everything goes fine, should not touch anything below
 
@@ -69,4 +71,4 @@ clean:
 realclean:
 	rm -rf $(OBJS) $(TARGET)
 
-## end
+## @eof Makefile
