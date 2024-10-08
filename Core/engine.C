@@ -119,22 +119,22 @@ void Engine::run(uint64_t kk, real_t dt, bool infiltrate_flag)
     _ws.SetPrecipitation(pp->data, _mmhr);
   }
 #ifndef ROUTING_ONLY
-  // _ws.CompIntercept(dt);
-  _ws.comp_intercept_starpu(dt);
+  _ws.CompIntercept(dt);
+  // _ws.comp_intercept_starpu(dt);
 #endif
-  // _ws.CompOverlandDepth(dt);
-  _ws.comp_overland_depth_starpu(dt);
+  _ws.CompOverlandDepth(dt);
+  // _ws.comp_overland_depth_starpu(dt);
 #ifndef ROUTING_ONLY
   if (infiltrate_flag && _soil_hc && _soil_ph && _soil_ep) {
-    // _ws.CompInfiltration(dt);
-    _ws.comp_infiltration_starpu(dt);
+    _ws.CompInfiltration(dt);
+    // _ws.comp_infiltration_starpu(dt);
   }
 #endif
-  _ws.CompDiffusiveRouting(dt);
-  // _ws.comp_diffusive_routing_starpu(dt);
-  // _ws.CompOutlet(dt);
-  _ws.comp_outlet_starpu(dt);
-  _ws.comp_storm_starpu(dt);
+  // _ws.CompDiffusiveRouting(dt);
+  _ws.comp_diffusive_routing_starpu(dt);
+  _ws.CompOutlet(dt);
+  // _ws.comp_outlet_starpu(dt);
+  // _ws.comp_storm_starpu(dt);
 }
 
 void Engine::profile_run(uint64_t kk, real_t dt, bool infiltrate_flag,
@@ -154,19 +154,19 @@ void Engine::profile_run(uint64_t kk, real_t dt, bool infiltrate_flag,
   }
 #ifndef ROUTING_ONLY
   double t_intercept_0 = starpu_timing_now();
-  // _ws.CompIntercept(dt);
-  _ws.comp_intercept_starpu(dt);
+  _ws.CompIntercept(dt);
+  // _ws.comp_intercept_starpu(dt);
   *t_intercept += (starpu_timing_now() - t_intercept_0);
 #endif
   double t_overland_0  = starpu_timing_now();
-  // _ws.CompOverlandDepth(dt);
-  _ws.comp_overland_depth_starpu(dt);
+  _ws.CompOverlandDepth(dt);
+  // _ws.comp_overland_depth_starpu(dt);
   *t_overland += (starpu_timing_now() - t_overland_0);
 #ifndef ROUTING_ONLY
   if (infiltrate_flag && _soil_hc && _soil_ph && _soil_ep) {
     double t_infiltration_0 = starpu_timing_now();
-    // _ws.CompInfiltration(dt);
-    _ws.comp_infiltration_starpu(dt);
+    _ws.CompInfiltration(dt);
+    // _ws.comp_infiltration_starpu(dt);
     *t_infiltration += (starpu_timing_now() - t_infiltration_0);
   }
 #endif
@@ -176,9 +176,9 @@ void Engine::profile_run(uint64_t kk, real_t dt, bool infiltrate_flag,
   *t_diffusive += (starpu_timing_now() - t_diffusive_0);
 
   double t_outlet_0 = starpu_timing_now();
-  // _ws.CompOutlet(dt);
-  _ws.comp_outlet_starpu(dt);
-  _ws.comp_storm_starpu(dt);
+  _ws.CompOutlet(dt);
+  // _ws.comp_outlet_starpu(dt);
+  // _ws.comp_storm_starpu(dt);
   *t_outlet += (starpu_timing_now() - t_outlet_0);
 }
 
