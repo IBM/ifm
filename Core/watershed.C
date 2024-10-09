@@ -77,6 +77,39 @@ void WaterShed::Setup(uint64_t nrow, uint64_t ncol, real_t gsize, real_t llx, re
   //_tmph = (real_t*)malloc(sizeof(real_t) * mysize);
   //_tmpp = (real_t*)malloc(sizeof(real_t) * mysize);
   //_tmpt = (real_t*)malloc(sizeof(real_t) * mysize);
+
+    // calculate no. of blocks
+    nt = _store_size/NB;
+
+    // register data arrays with StarPU (intercept)
+    starpu_vector_data_register(&pre_h, 0, (uintptr_t)_PRE, _store_size, sizeof(_PRE[0]));
+    starpu_vector_data_register(&ret_h, 0, (uintptr_t)_RET, _store_size, sizeof(_RET[0]));
+
+    // register data arrays with StarPU (overland depth)
+    starpu_vector_data_register(&h_h,    0, (uintptr_t)_H,    _store_size, sizeof(_H[0]));
+    starpu_vector_data_register(&olr_h,  0, (uintptr_t)_OLR,  _store_size, sizeof(_OLR[0]));
+    starpu_vector_data_register(&mask_h, 0, (uintptr_t)_MASK, _store_size, sizeof(_MASK[0]));
+    starpu_vector_data_register(&maxh_h, 0, (uintptr_t)_MAXH, _store_size, sizeof(_MAXH[0]));
+    starpu_vector_data_register(&vol_h,  0, (uintptr_t)_VOL,  _store_size, sizeof(_VOL[0]));
+    starpu_vector_data_register(&inth_h, 0, (uintptr_t)_INTH, _store_size, sizeof(_INTH[0]));
+
+    // create block filter
+    block_filter = {
+        .filter_func = starpu_vector_filter_block,
+        .nchildren   = nt,
+    };
+
+    // partition data arrays (intercept)
+    starpu_data_partition(pre_h, &block_filter);
+    starpu_data_partition(ret_h, &block_filter);
+
+    // partition data arrays (overland routing)
+    starpu_data_partition(h_h,    &block_filter);
+    starpu_data_partition(olr_h,  &block_filter);
+    starpu_data_partition(mask_h, &block_filter);
+    starpu_data_partition(maxh_h, &block_filter);
+    starpu_data_partition(vol_h,  &block_filter);
+    starpu_data_partition(inth_h, &block_filter);
 }
 
 void WaterShed::Init(real_t *elevation, short *mask, real_t *lakes, real_t *init_h) {
@@ -231,6 +264,8 @@ void WaterShed::SetStormDrain(uint64_t nout, uint64_t *xx, uint64_t *yy, real_t 
 // @param[in] cl_args array of StarPU inline arguments
 void intercept_cpu_func(void *buffers[], void *cl_args) {
 
+    printf("Entering 'intercept_cpu_func'...\n");
+
     // retrive precipitation and retention vector handles
     struct starpu_vector_interface *pre_h = (starpu_vector_interface*) buffers[0];
     struct starpu_vector_interface *ret_h = (starpu_vector_interface*) buffers[1];
@@ -256,6 +291,8 @@ void intercept_cpu_func(void *buffers[], void *cl_args) {
             _RET[jj] -= _PRE[jj]*dt;
         }
     }
+
+    printf("Exiting 'intercept_cpu_func'...\n");
 }
 
 // StarPU codelet for computing intercept
@@ -266,45 +303,61 @@ struct starpu_codelet intercept_cl {
 };
 
 // @brief Computes intercept
-// @param[in] nb no. of StarPU blocks
+// @param[in] nb StarPU block size
 // @param[in] dt time increment
-void WaterShed::comp_intercept_starpu(uint32_t nb, real_t dt) {
+void WaterShed::comp_intercept_starpu(real_t dt) {
+
+    printf("Entering 'WaterShed::comp_intercept_starpu'...\n");
+
+    /*
+    // no. of StarPU blocks
+    uint32_t nt = _store_size/nb;
 
     // define StarPU handles for precipitation and retention data arrays
-    starpu_data_handle_t pre_h, ret_h;
+    // starpu_data_handle_t pre_h, ret_h;
 
     // register data arrays with StarPU
-    starpu_vector_data_register(&pre_h, 0, (uintptr_t)_PRE, _store_size, sizeof(_PRE[0]));
-    starpu_vector_data_register(&ret_h, 0, (uintptr_t)_RET, _store_size, sizeof(_RET[0]));
+    // starpu_vector_data_register(&pre_h, 0, (uintptr_t)_PRE, _store_size, sizeof(_PRE[0]));
+    // starpu_vector_data_register(&ret_h, 0, (uintptr_t)_RET, _store_size, sizeof(_RET[0]));
 
     // divide data arrays into blocks
     struct starpu_data_filter block_filter = {
         .filter_func = starpu_vector_filter_block,
-        .nchildren   = nb,
+        .nchildren   = nt,
     };
 
     starpu_data_partition(pre_h, &block_filter);
     starpu_data_partition(ret_h, &block_filter);
+    */
 
     // for each block do: submit StarPU tasks non-blockingly
-    for (int b = 0; b < nb; b++) {
+    int status = 0;
+
+    for (int b = 0; b < nt; b++) {
 
         // obtain handles for blocks
         starpu_data_handle_t pre_nb_h = starpu_data_get_sub_data(pre_h, 1, b);
         starpu_data_handle_t ret_nb_h = starpu_data_get_sub_data(ret_h, 1, b);
 
+        printf("Submitting StarPU task for block %d...\n", b);
+
         // submit StarPU task
-        starpu_task_insert(
+        status = starpu_task_insert(
             &intercept_cl,
             STARPU_RW,     pre_nb_h,
             STARPU_RW,     ret_nb_h,
             STARPU_VALUE, &dt, sizeof(dt),
             0);
+
+        STARPU_CHECK_RETURN_VALUE(status, "starpu_task_insert");
+
+        printf("StarPU task for block %d was submitted successfully.\n", b);
     }
 
     // wait for all tasks submitted so far
     starpu_task_wait_for_all();
 
+    /*
     // unpartition data
     starpu_data_unpartition(pre_h, 0);
     starpu_data_unpartition(ret_h, 0);
@@ -312,6 +365,9 @@ void WaterShed::comp_intercept_starpu(uint32_t nb, real_t dt) {
     // unregister data arrays
     starpu_data_unregister(pre_h);
     starpu_data_unregister(ret_h);
+    */
+
+    printf("Exiting 'WaterShed::comp_intercept_starpu'...\n");
 }
 
 // Computes intercept
@@ -329,8 +385,12 @@ void WaterShed::CompIntercept(real_t dt) {
    }
 }
 
-// StarPU overland depth kernel function for CPU execution
+// @brief StarPU overland depth kernel function for CPU execution
+// @param[in] buffers pointer to array of StarPU vector interfaces
+// @param[in] cl_args array of StarPU inline arguments
 void overland_depth_cpu_func(void *buffers[], void *cl_args) {
+
+    printf("Entering 'overland_depth_cpu_func'...\n");
 
     // retrieve vector handles
     struct starpu_vector_interface *h_h    = (starpu_vector_interface*) buffers[0];
@@ -342,14 +402,14 @@ void overland_depth_cpu_func(void *buffers[], void *cl_args) {
     struct starpu_vector_interface *inth_h = (starpu_vector_interface*) buffers[6];
 
     // obtain no. of elements and base pointers
-    int n = STARPU_VECTOR_GET_NX(h_h);
-    real_t *h    = (real_t*) STARPU_VECTOR_GET_PTR(h_h);
-    real_t *olr  = (real_t*) STARPU_VECTOR_GET_PTR(olr_h);
-    real_t *pre  = (real_t*) STARPU_VECTOR_GET_PTR(pre_h);
-    real_t *mask = (real_t*) STARPU_VECTOR_GET_PTR(mask_h);
-    real_t *maxh = (real_t*) STARPU_VECTOR_GET_PTR(maxh_h);
-    real_t *vol  = (real_t*) STARPU_VECTOR_GET_PTR(vol_h);
-    real_t *inth = (real_t*) STARPU_VECTOR_GET_PTR(inth_h);
+    int _store_size = STARPU_VECTOR_GET_NX(h_h);
+    real_t *_H    = (real_t*) STARPU_VECTOR_GET_PTR(h_h);
+    real_t *_OLR  = (real_t*) STARPU_VECTOR_GET_PTR(olr_h);
+    real_t *_PRE  = (real_t*) STARPU_VECTOR_GET_PTR(pre_h);
+    real_t *_MASK = (real_t*) STARPU_VECTOR_GET_PTR(mask_h);
+    real_t *_MAXH = (real_t*) STARPU_VECTOR_GET_PTR(maxh_h);
+    real_t *_VOL  = (real_t*) STARPU_VECTOR_GET_PTR(vol_h);
+    real_t *_INTH = (real_t*) STARPU_VECTOR_GET_PTR(inth_h);
 
     // obtain inline arguments
     bool   printed_depth_underflow;
@@ -357,27 +417,31 @@ void overland_depth_cpu_func(void *buffers[], void *cl_args) {
     starpu_codelet_unpack_args(cl_args, &printed_depth_underflow, &dt, &dtdx2, &gsz2);
 
     // kernel body
-    for (int i = 0; i < n; i++) {
+    // @todo call original kernel function 'WaterShed::CompOverlandDepth' to
+    //       avoid extra mistakes
+    for (int jj = 0; jj < _store_size; jj++) {
 
-        h[i] += olr[i]*dtdx2 + pre[i]*dt;
+        _H[jj] += _OLR[jj]*dtdx2 + _PRE[jj]*dt;
 
         // remove water @ boundary cells
-        if (mask[i] == -1) h[i] = 0.001;
+        if (_MASK[jj] == -1) _H[jj] = 0.001;
 
         // check for underflow
-        if (unlikely(h[i] < 0)) {
+        if (unlikely(_H[jj] < 0)) {
             if (!printed_depth_underflow) {
-                printf("Possible numerical instability: %10ld: %.5e out of %5e\n", i, h[i], olr[i]);
+                printf("Possible numerical instability: %10ld: %.5e out of %5e\n", jj, _H[jj], _OLR[jj]);
                 printed_depth_underflow = true;
             }
-            h[i] = real_sqrt(REAL_EPSILON);
+            _H[jj] = real_sqrt(REAL_EPSILON);
         }
 
         // find maximum depth, store it
-        maxh[i]  = maxh[i] > h[i] ? maxh[i] : h[i];
-        vol[i]   = maxh[i] * gsz2;
-        inth[i] += h[i] * dt;
+        _MAXH[jj]  = _MAXH[jj] > _H[jj] ? _MAXH[jj] : _H[jj];
+        _VOL[jj]   = _MAXH[jj] * gsz2;
+        _INTH[jj] += _H[jj] * dt;
     }
+
+    printf("Exiting 'overland_depth_cpu_func'...\n");
 }
 
 // StarPU codelet for computing overland depth
@@ -388,13 +452,11 @@ struct starpu_codelet overland_depth_cl {
 };
 
 // Computes overland depth
-// @note Uses StarPU for shared-memory parallelism
 int WaterShed::comp_overland_depth_starpu(real_t dt) {
 
-    // Number of StarPU blocks
-    // @todo Change value in future
-    int const NBLOCKS = 8;
+    printf("Entering 'WaterShed::comp_overland_depth_starpu'...\n");
 
+    /*
     // define StarPU data handles for depth, overland routing, precipitation, mask, volume and integral of depth data arrays
     starpu_data_handle_t h_h, olr_h, pre_h, mask_h, maxh_h, vol_h, inth_h;
 
@@ -410,7 +472,7 @@ int WaterShed::comp_overland_depth_starpu(real_t dt) {
     // divide arrays into blocks
     struct starpu_data_filter block_filter = {
         .filter_func = starpu_vector_filter_block,
-        .nchildren   = NBLOCKS,
+        .nchildren   = nt,
     };
 
     starpu_data_partition(h_h,    &block_filter);
@@ -420,12 +482,15 @@ int WaterShed::comp_overland_depth_starpu(real_t dt) {
     starpu_data_partition(maxh_h, &block_filter);
     starpu_data_partition(vol_h,  &block_filter);
     starpu_data_partition(inth_h, &block_filter);
+    */
 
     real_t gsz2  = _gsz * _gsz;
     real_t dtdx2 = dt / gsz2;
 
     // for each block do: submit StarPU tasks non-blockingly
-    for (int b = 0; b < NBLOCKS; b++) {
+    int status = 0;
+
+    for (int b = 0; b < nt; b++) {
 
         // obtain handles for blocks
         starpu_data_handle_t h_nb_h    = starpu_data_get_sub_data(h_h,    1, b);
@@ -436,8 +501,10 @@ int WaterShed::comp_overland_depth_starpu(real_t dt) {
         starpu_data_handle_t vol_nb_h  = starpu_data_get_sub_data(vol_h,  1, b);
         starpu_data_handle_t inth_nb_h = starpu_data_get_sub_data(inth_h, 1, b);
 
+        printf("Submitting StarPU task for block %d...\n", b);
+
         // submit StarPU task
-        starpu_task_insert(
+        status = starpu_task_insert(
             &overland_depth_cl,
             STARPU_RW, h_nb_h,
             STARPU_R,  olr_nb_h,
@@ -447,15 +514,20 @@ int WaterShed::comp_overland_depth_starpu(real_t dt) {
             STARPU_W,  vol_nb_h,
             STARPU_RW, inth_nb_h,
             STARPU_VALUE, &_printed_depth_underflow, sizeof(_printed_depth_underflow),
-            STARPU_VALUE, &dt,           sizeof(dt),
-            STARPU_VALUE, &dtdx2,        sizeof(dtdx2),
-            STARPU_VALUE, &gsz2,         sizeof(gsz2),
+            STARPU_VALUE, &dt,    sizeof(dt),
+            STARPU_VALUE, &dtdx2, sizeof(dtdx2),
+            STARPU_VALUE, &gsz2,  sizeof(gsz2),
             0);
+
+        STARPU_CHECK_RETURN_VALUE(status, "starpu_task_insert");
+
+        printf("StarPU task for block %d was submitted successfully.\n", b);
     }
 
     // wait for all tasks submitted so far
     starpu_task_wait_for_all();
 
+    /*
     // unpartition data
     starpu_data_unpartition(h_h,    0);
     starpu_data_unpartition(olr_h,  0);
@@ -473,6 +545,9 @@ int WaterShed::comp_overland_depth_starpu(real_t dt) {
     starpu_data_unregister(maxh_h);
     starpu_data_unregister(vol_h);
     starpu_data_unregister(inth_h);
+    */
+
+    printf("Exiting 'WaterShed::comp_overland_depth_starpu'...\n");
 
     return 0;
 }
@@ -628,6 +703,9 @@ int WaterShed::comp_infiltration_starpu(real_t dt) {
 
 // Computes infiltration
 int WaterShed::CompInfiltration(real_t dt) {
+
+    printf("Entering 'WaterShed::CompInfiltration'...\n");
+
   uint64_t jj;
   real_t eight_dt = 8.0*dt;
   real_t two_dt = 2.0*dt;
@@ -651,6 +729,8 @@ int WaterShed::CompInfiltration(real_t dt) {
     _VSAT[jj] += tmpinf*dt;
 
   }
+
+    printf("Exiting 'WaterShed::CompInfiltration'...\n");
 
   return 0;
 }
@@ -964,6 +1044,9 @@ int WaterShed::comp_diffusive_routing_starpu(real_t dt) {
 
 // Computes diffusive routing
 int WaterShed::CompDiffusiveRouting(real_t dt) {
+
+    printf("Entering 'WaterShed::CompDiffusiveRouting'...\n");
+
   uint64_t cur,top,rgt;
   real_t cellsize = _gsz;   // we might need more for openMP
   const real_t chicken = -real_sqrt(REAL_EPSILON);
@@ -1093,6 +1176,8 @@ int WaterShed::CompDiffusiveRouting(real_t dt) {
       _OLR[rgt] += OLRDIM1; 
     }
   }
+
+    printf("Exiting 'WaterShed::CompDiffusiveRouting'...\n");
 
   return 0;
 }
@@ -1377,6 +1462,9 @@ int WaterShed::comp_storm_starpu(real_t dt) {
 
 // outlet flow, this is will not work well in openMP since we are not expecting many outlets
 int WaterShed::CompOutlet(real_t dt) {
+
+    printf("Entering 'WaterShed::CompOutlet'...\n");
+
   uint64_t jj;
   uint64_t idx;
   real_t qout;
@@ -1419,6 +1507,8 @@ int WaterShed::CompOutlet(real_t dt) {
   }
 
   // more bookkeeping might be needed here
+
+    printf("Exiting 'WaterShed::CompOutlet'...\n");
 
   return 0;
 }

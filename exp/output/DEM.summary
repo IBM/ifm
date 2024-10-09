@@ -1,5 +1,5 @@
 ===== IFM run of DEM =====
-Simulation performed on          		Fri May 17 12:35:20 2024
+Simulation performed on          		Wed Oct  9 15:31:04 2024
 
 Floating point type:             		DOUBLE
 
@@ -19,7 +19,7 @@ Output OLR:                      		NO
 Output VSAT:                     		NO
 
 Simulation time step:            		1.0 sec
-Simulation Tstop:                		11400 sec
+Simulation Tstop:                		10 sec
 Infiltration stage:              		YES
 Profile code:                    		YES
 Printing interval:               		3600 sec

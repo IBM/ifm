@@ -107,11 +107,12 @@ void Engine::setup()
 
 // @brief Executes IFM computation engine at given time instant
 // @param[in] kk time step
-// @param[in] nb no. of StarPU blocks
 // @param[in] dt time increment
 // @param[in] infiltrate_flag switch to enable or disable infiltration stage
-void Engine::run(uint64_t kk, uint32_t nb, real_t dt, bool infiltrate_flag)
+void Engine::run(uint64_t kk, real_t dt, bool infiltrate_flag)
 {
+    printf("Entering 'Engine::run'...\n");
+
   // uint64_t pre_cntr = (uint64_t)(pre_window/dt);
 
   // process the precipitation (specified in mm/hr)
@@ -124,34 +125,37 @@ void Engine::run(uint64_t kk, uint32_t nb, real_t dt, bool infiltrate_flag)
     _ws.SetPrecipitation(pp->data, _mmhr);
   }
 #ifndef ROUTING_ONLY
-  _ws.CompIntercept(dt);
-  // _ws.comp_intercept_starpu(nb, dt);
+  // _ws.CompIntercept(dt);
+  _ws.comp_intercept_starpu(dt);
 #endif
-  _ws.CompOverlandDepth(dt);
-  // _ws.comp_overland_depth_starpu(dt);
+  // _ws.CompOverlandDepth(dt);
+  _ws.comp_overland_depth_starpu(dt);
 #ifndef ROUTING_ONLY
   if (infiltrate_flag && _soil_hc && _soil_ph && _soil_ep) {
     _ws.CompInfiltration(dt);
     // _ws.comp_infiltration_starpu(dt);
   }
 #endif
-  // _ws.CompDiffusiveRouting(dt);
-  _ws.comp_diffusive_routing_starpu(dt);
+  _ws.CompDiffusiveRouting(dt);
+  // _ws.comp_diffusive_routing_starpu(dt);
   _ws.CompOutlet(dt);
   // _ws.comp_outlet_starpu(dt);
   // _ws.comp_storm_starpu(dt);
+
+    printf("Exiting 'Engine::run'...\n");
 }
 
 // @brief Executes IFM computation engine at given time instant
 // @note Uses StarPU timing routines to measure execution time of each IFM computation phase
 // @param[in] kk time step
-// @param[in] nb no. of StarPU blocks
 // @param[in] dt time increment
 // @param[in] infiltrate_flag switch to enable or disable infiltration stage
-void Engine::profile_run(uint64_t kk, uint32_t nb, real_t dt, bool infiltrate_flag,
+void Engine::profile_run(uint64_t kk, real_t dt, bool infiltrate_flag,
     real_t *t_intercept, real_t *t_overland, real_t *t_infiltration,
     real_t *t_diffusive, real_t *t_outlet)
 {
+    printf("Entering 'Engine::profile_run'...\n");
+
   // uint64_t pre_cntr = (uint64_t)(pre_window/dt);
 
   // process the precipitation (specified in mm/hr)
@@ -165,13 +169,13 @@ void Engine::profile_run(uint64_t kk, uint32_t nb, real_t dt, bool infiltrate_fl
   }
 #ifndef ROUTING_ONLY
   double t_intercept_0 = starpu_timing_now();
-  _ws.CompIntercept(dt);
-  // _ws.comp_intercept_starpu(nb, dt);
+  // _ws.CompIntercept(dt);
+  _ws.comp_intercept_starpu(dt);
   *t_intercept += (starpu_timing_now() - t_intercept_0);
 #endif
   double t_overland_0  = starpu_timing_now();
-  _ws.CompOverlandDepth(dt);
-  // _ws.comp_overland_depth_starpu(dt);
+  // _ws.CompOverlandDepth(dt);
+  _ws.comp_overland_depth_starpu(dt);
   *t_overland += (starpu_timing_now() - t_overland_0);
 #ifndef ROUTING_ONLY
   if (infiltrate_flag && _soil_hc && _soil_ph && _soil_ep) {
@@ -191,6 +195,8 @@ void Engine::profile_run(uint64_t kk, uint32_t nb, real_t dt, bool infiltrate_fl
   // _ws.comp_outlet_starpu(dt);
   // _ws.comp_storm_starpu(dt);
   *t_outlet += (starpu_timing_now() - t_outlet_0);
+
+    printf("Exiting 'Engine::profile_run'...\n");
 }
 
 // @eof engine.C

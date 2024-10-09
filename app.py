@@ -101,12 +101,13 @@ def launch_ifm(inputdir, outputdir):
         "-O", f"{outputdir}",
         "-d", f"{inputdir}/DEM.nc",
         "-p", f"{inputdir}/Precipitation.csv",
-        "-f", str(simulation_time_in_sec),
+        # "-f", str(simulation_time_in_sec),
+        "-f", str(10),  # @note set for debug purposes only
         "-s", str(simulation_timestep),
         "-r", str(output_rate),
         "-c", str(spatial_resolution),
-        "-i", str(1),  # infiltrate flag
-        "-t", str(1),  # profile    flag (measure elapsed time)
+        "-i", str(1),   # infiltrate flag
+        "-t", str(1),   # profile    flag (measure elapsed time)
         "-l", f"{inputdir}/LandCover.nc",
         "-L", f"{inputdir}/LandCover.map",
         "-H", f"{inputdir}/SoilHydraulicConductivity.nc",

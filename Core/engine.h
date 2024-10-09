@@ -134,9 +134,9 @@ class Engine {
 
     void setup();
 
-    void run(uint64_t kk, uint32_t nb, real_t dt, bool infiltrate_flag);
+    void run(uint64_t kk, real_t dt, bool infiltrate_flag);
 
-    void profile_run(uint64_t kk, uint32_t nb, real_t dt,
+    void profile_run(uint64_t kk, real_t dt,
         bool infiltrate_flag, real_t *t_intercept,
         real_t *t_overland,   real_t *t_infiltration,
         real_t *t_diffusive,  real_t *t_outlet);

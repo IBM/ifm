@@ -6,15 +6,15 @@
  * @email  <main author's email>
  * @author  Maksims Abalenkovs
  * @email   maksims.abalenkovs@stfc.ac.uk
- * @date    Oct 8, 2024
+ * @date    Oct 9, 2024
  * @version 1.4
  */
-
 
 #ifndef _WATERSHED_H
 #define _WATERSHED_H
 
 #include <assert.h>
+#include <starpu.h>
 #include <stdint.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -52,6 +52,28 @@ class Engine;
 
 class WaterShed {
  private:
+
+    // StarPU block size
+    uint32_t const NB = 488;
+
+    // no. of StarPU blocks
+    uint32_t nt;
+
+    // StarPU data handles (intercept)
+    starpu_data_handle_t pre_h;  // precipitation
+    starpu_data_handle_t ret_h;  // retention
+
+    // StarPU data handles (overland depth)
+    starpu_data_handle_t h_h;     // depth
+    starpu_data_handle_t olr_h;   // overland routing
+    starpu_data_handle_t mask_h;  // mask
+    starpu_data_handle_t maxh_h;  // maximum height (depth?)
+    starpu_data_handle_t vol_h;   // volume
+    starpu_data_handle_t inth_h;  // integral of depth
+  
+    // StarPU vector block filter for precipitation and retention data arrays
+    struct starpu_data_filter block_filter;
+
   real_t    *_ELE;        // elevation
   real_t    *_H;          // depth
   real_t    *_VOL;        // volume
@@ -217,6 +239,30 @@ class WaterShed {
 
     if ( _minTx ) { free(_minTx); _minTx = 0; }
     if ( _minTy ) { free(_minTy); _minTy = 0; }
+
+    // unpartition data (intercept)
+    starpu_data_unpartition(pre_h, 0);
+    starpu_data_unpartition(ret_h, 0);
+
+    // unpartition data (overland depth)
+    starpu_data_unpartition(h_h,    0);
+    starpu_data_unpartition(olr_h,  0);
+    starpu_data_unpartition(mask_h, 0);
+    starpu_data_unpartition(maxh_h, 0);
+    starpu_data_unpartition(vol_h,  0);
+    starpu_data_unpartition(inth_h, 0);
+
+    // unregister data arrays (intercept)
+    starpu_data_unregister(pre_h);
+    starpu_data_unregister(ret_h);
+
+    // unregister data arrays (overland depth)
+    starpu_data_unregister(h_h);
+    starpu_data_unregister(olr_h);
+    starpu_data_unregister(mask_h);
+    starpu_data_unregister(maxh_h);
+    starpu_data_unregister(vol_h);
+    starpu_data_unregister(inth_h);
   }
 
   real_t GetHeight(uint64_t x, uint64_t y) {
@@ -255,7 +301,7 @@ class WaterShed {
   int  CompDiffusiveRouting(real_t dt);
   int  CompOutlet(real_t dt);
 
-  void comp_intercept_starpu(uint32_t nb, real_t dt);
+  void comp_intercept_starpu(real_t dt);
   int  comp_overland_depth_starpu(real_t dt);
   int  comp_infiltration_starpu(real_t dt);
   int  comp_diffusive_routing_starpu(real_t dt);

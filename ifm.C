@@ -6,8 +6,11 @@
  * @email  <main author's email>
  * @author  Maksims Abalenkovs
  * @email   maksims.abalenkovs@stfc.ac.uk
- * @date    Oct 8, 2024
+ * @date    Oct 9, 2024
  * @version 1.4
+ *
+ * @todo Read StarPU block size from command line
+ * @todo Calculate no. of StarPU block size 'nt' and store globally
  */
 
 #include <ctype.h>
@@ -369,11 +372,6 @@ void dumpInformation(const char *fname, const char *base, int ismaskgen, OptionP
 
 int main(int argc, char* argv[]) {
 
-  // StarPU
-  // no. of StarPU blocks
-  // @todo change for higher performance
-  uint64_t const NB = 8;
-
   // File I/O
   precip_table *pt=NULL;
   FILE         *F=NULL;
@@ -397,6 +395,8 @@ int main(int argc, char* argv[]) {
   uint64_t      num_outlets=0;
 
   // Initialise StarPU runtime
+  printf("Initialising StarPU runtime...\n");
+
   int status = starpu_init(NULL);
 
   if (status == -ENODEV) {
@@ -404,6 +404,8 @@ int main(int argc, char* argv[]) {
   }
 
   STARPU_CHECK_RETURN_VALUE(status, "starpu_init");
+
+  printf("StarPU runtime was initialised successfully.\n");
 
   // Command line argument parsing
   OptionParser options(argc, argv);
@@ -579,16 +581,20 @@ int main(int argc, char* argv[]) {
   real_t t_outlet       = 0.0;
 
   // for each time step kk
+  printf("Entering loop over time...\n");
+
   for (int kk=start_pt; kk<num_pt || draining == false; kk++) {
+
+      printf("Starting time iteration %d...\n", kk);
 
     // launch computation engine
     if (options.profile_flag) {
-        engine.profile_run(kk, NB, dt, options.infiltrate_flag,
+        engine.profile_run(kk, dt, options.infiltrate_flag,
             &t_intercept, &t_overland, &t_infiltration,
             &t_diffusive, &t_outlet);
     }
     else {
-        engine.run(kk, NB, dt, options.infiltrate_flag);
+        engine.run(kk, dt, options.infiltrate_flag);
     }
     rotating_wheel();
 
@@ -665,12 +671,20 @@ int main(int argc, char* argv[]) {
     }
   }
 
+  printf("Exiting loop over time...\n");
+
+  // terminate StarPU
+  starpu_shutdown();
+
+  printf("StarPU runtime was shut down successfully.\n");
+
   // print out OpenMP timer values
   if (options.profile_flag) {
 
       printf("t_intr\tt_over\tt_infl\tt_diff\tt_outl\n");
       printf("%g\t%g\t%g\t%g\t%g\n",
-          t_intercept, t_overland, t_infiltration, t_diffusive, t_outlet);
+          t_intercept*1e-6, t_overland*1e-6, t_infiltration*1e-6,
+          t_diffusive*1e-6, t_outlet*1e-6);
   }
 
   printf("Done\n");
@@ -681,9 +695,6 @@ int main(int argc, char* argv[]) {
   }
 
   DELETE_OBJS();
-
-  // terminate StarPU
-  starpu_shutdown();
 
   return 0;
 }
