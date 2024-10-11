@@ -101,8 +101,7 @@ def launch_ifm(inputdir, outputdir):
         "-O", f"{outputdir}",
         "-d", f"{inputdir}/DEM.nc",
         "-p", f"{inputdir}/Precipitation.csv",
-        # "-f", str(simulation_time_in_sec),
-        "-f", str(10),  # @note set for debug purposes only
+        # "-f", str(10),  # @note set for debug purposes only
         "-s", str(simulation_timestep),
         "-r", str(output_rate),
         "-c", str(spatial_resolution),

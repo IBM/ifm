@@ -111,7 +111,7 @@ void Engine::setup()
 // @param[in] infiltrate_flag switch to enable or disable infiltration stage
 void Engine::run(uint64_t kk, real_t dt, bool infiltrate_flag)
 {
-    printf("Entering 'Engine::run'...\n");
+    // printf("Entering 'Engine::run'...\n");
 
   // uint64_t pre_cntr = (uint64_t)(pre_window/dt);
 
@@ -132,8 +132,8 @@ void Engine::run(uint64_t kk, real_t dt, bool infiltrate_flag)
   _ws.comp_overland_depth_starpu(dt);
 #ifndef ROUTING_ONLY
   if (infiltrate_flag && _soil_hc && _soil_ph && _soil_ep) {
-    _ws.CompInfiltration(dt);
-    // _ws.comp_infiltration_starpu(dt);
+    // _ws.CompInfiltration(dt);
+    _ws.comp_infiltration_starpu(dt);
   }
 #endif
   _ws.CompDiffusiveRouting(dt);
@@ -142,7 +142,7 @@ void Engine::run(uint64_t kk, real_t dt, bool infiltrate_flag)
   // _ws.comp_outlet_starpu(dt);
   // _ws.comp_storm_starpu(dt);
 
-    printf("Exiting 'Engine::run'...\n");
+    // printf("Exiting 'Engine::run'...\n");
 }
 
 // @brief Executes IFM computation engine at given time instant
@@ -154,7 +154,7 @@ void Engine::profile_run(uint64_t kk, real_t dt, bool infiltrate_flag,
     real_t *t_intercept, real_t *t_overland, real_t *t_infiltration,
     real_t *t_diffusive, real_t *t_outlet)
 {
-    printf("Entering 'Engine::profile_run'...\n");
+    // printf("Entering 'Engine::profile_run'...\n");
 
   // uint64_t pre_cntr = (uint64_t)(pre_window/dt);
 
@@ -180,8 +180,8 @@ void Engine::profile_run(uint64_t kk, real_t dt, bool infiltrate_flag,
 #ifndef ROUTING_ONLY
   if (infiltrate_flag && _soil_hc && _soil_ph && _soil_ep) {
     double t_infiltration_0 = starpu_timing_now();
-    _ws.CompInfiltration(dt);
-    // _ws.comp_infiltration_starpu(dt);
+    // _ws.CompInfiltration(dt);
+    _ws.comp_infiltration_starpu(dt);
     *t_infiltration += (starpu_timing_now() - t_infiltration_0);
   }
 #endif
@@ -196,7 +196,7 @@ void Engine::profile_run(uint64_t kk, real_t dt, bool infiltrate_flag,
   // _ws.comp_storm_starpu(dt);
   *t_outlet += (starpu_timing_now() - t_outlet_0);
 
-    printf("Exiting 'Engine::profile_run'...\n");
+    // printf("Exiting 'Engine::profile_run'...\n");
 }
 
 // @eof engine.C

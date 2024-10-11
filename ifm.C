@@ -395,7 +395,7 @@ int main(int argc, char* argv[]) {
   uint64_t      num_outlets=0;
 
   // Initialise StarPU runtime
-  printf("Initialising StarPU runtime...\n");
+  // printf("Initialising StarPU runtime...\n");
 
   int status = starpu_init(NULL);
 
@@ -405,7 +405,7 @@ int main(int argc, char* argv[]) {
 
   STARPU_CHECK_RETURN_VALUE(status, "starpu_init");
 
-  printf("StarPU runtime was initialised successfully.\n");
+  // printf("StarPU runtime was initialised successfully.\n");
 
   // Command line argument parsing
   OptionParser options(argc, argv);
@@ -581,11 +581,11 @@ int main(int argc, char* argv[]) {
   real_t t_outlet       = 0.0;
 
   // for each time step kk
-  printf("Entering loop over time...\n");
+  // printf("Entering loop over time...\n");
 
   for (int kk=start_pt; kk<num_pt || draining == false; kk++) {
 
-      printf("Starting time iteration %d...\n", kk);
+      // printf("Starting time iteration %d...\n", kk);
 
     // launch computation engine
     if (options.profile_flag) {
@@ -669,14 +669,17 @@ int main(int argc, char* argv[]) {
         delete olr_x;
       }
     }
+
+    // wait for all tasks submitted so far
+    starpu_task_wait_for_all();
   }
 
-  printf("Exiting loop over time...\n");
+  // printf("Exiting loop over time...\n");
 
   // terminate StarPU
   starpu_shutdown();
 
-  printf("StarPU runtime was shut down successfully.\n");
+  // printf("StarPU runtime was shut down successfully.\n");
 
   // print out OpenMP timer values
   if (options.profile_flag) {

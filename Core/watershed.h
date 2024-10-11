@@ -67,9 +67,14 @@ class WaterShed {
     starpu_data_handle_t h_h;     // depth
     starpu_data_handle_t olr_h;   // overland routing
     starpu_data_handle_t mask_h;  // mask
-    starpu_data_handle_t maxh_h;  // maximum height (depth?)
+    starpu_data_handle_t maxh_h;  // maximum depth
     starpu_data_handle_t vol_h;   // volume
     starpu_data_handle_t inth_h;  // integral of depth
+
+    // StarPU data handles (infiltration)
+    starpu_data_handle_t hcon_h;  // conductivity
+    starpu_data_handle_t vsat_h;  // saturation volume
+    starpu_data_handle_t p2_h;    // second term in GA model
   
     // StarPU vector block filter for precipitation and retention data arrays
     struct starpu_data_filter block_filter;
@@ -252,6 +257,11 @@ class WaterShed {
     starpu_data_unpartition(vol_h,  0);
     starpu_data_unpartition(inth_h, 0);
 
+    // unpartition data (infiltration)
+    starpu_data_unpartition(hcon_h, 0);
+    starpu_data_unpartition(vsat_h, 0);
+    starpu_data_unpartition(p2_h,   0);
+
     // unregister data arrays (intercept)
     starpu_data_unregister(pre_h);
     starpu_data_unregister(ret_h);
@@ -263,6 +273,11 @@ class WaterShed {
     starpu_data_unregister(maxh_h);
     starpu_data_unregister(vol_h);
     starpu_data_unregister(inth_h);
+
+    // unregister data arrays (infiltration)
+    starpu_data_unregister(hcon_h);
+    starpu_data_unregister(vsat_h);
+    starpu_data_unregister(p2_h);
   }
 
   real_t GetHeight(uint64_t x, uint64_t y) {

@@ -1,3 +1,4 @@
 t_intr	t_over	t_infl	t_diff	t_outl
 9.99941	41.9706	35.6454	173.729	0.00418  // sequential, no OpenMP, no StarPU
 7857.79	99.2751	51.1374	221.487	0.004396 // parallel intercept, StarPU
+1152.22	960.176	971.673	37.3249	0.000796 // parallel intercept, overland routing and infiltration, StarPU
