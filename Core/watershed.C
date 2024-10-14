@@ -1270,16 +1270,11 @@ struct starpu_codelet outlet_cl {
 };
 
 // Computes outlet flow
-// @note Uses StarPU for shared-memory parallelism
 // @note h, store, n data arrays are _not_ divided into nblocks since their block size is different from outlets and out_slopes block size
 int WaterShed::comp_outlet_starpu(real_t dt) {
 
     if (_N_OUT > 0) {
 
-        // number of StarPU blocks
-        // @todo change value in future
-        int const NBLOCKS = 1;
-    
         // define StarPU handles for data arrays
         starpu_data_handle_t outlets_h, h_h, store_h, out_slopes_h, n_h;
     
@@ -1485,7 +1480,8 @@ int WaterShed::comp_storm_starpu(real_t dt) {
     return 0;
 }
 
-// outlet flow, this is will not work well in openMP since we are not expecting many outlets
+// Computes outlet flow
+// @note It may not work well in parallel since there are not many outlets
 int WaterShed::CompOutlet(real_t dt) {
 
     // printf("Entering 'WaterShed::CompOutlet'...\n");
