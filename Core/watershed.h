@@ -47,6 +47,24 @@
   } \
 } while(0)
 
+// Matrix data type
+
+// Matrix block
+typedef struct {
+
+    union {
+        int    i;
+        double d;
+    } *M;   // pointer to first element in block
+
+    int k;  // block index
+    int p;  // no. of block rows
+    int q;  // no. of block columns
+    int m;  // no. of matrix rows
+    int n;  // no. of matrix columns
+    int r;  // MPI rank of block owner
+} mtrx_blk;
+
 // Forward declaration
 class Engine;
 
@@ -60,22 +78,31 @@ class WaterShed {
     uint32_t nt;
 
     // StarPU data handles (intercept)
-    starpu_data_handle_t pre_h;  // precipitation
-    starpu_data_handle_t ret_h;  // retention
+    starpu_data_handle_t pre_h;    // precipitation
+    starpu_data_handle_t ret_h;    // retention
 
     // StarPU data handles (overland depth)
-    starpu_data_handle_t h_h;     // depth
-    starpu_data_handle_t olr_h;   // overland routing
-    starpu_data_handle_t mask_h;  // mask
-    starpu_data_handle_t maxh_h;  // maximum depth
-    starpu_data_handle_t vol_h;   // volume
-    starpu_data_handle_t inth_h;  // integral of depth
+    starpu_data_handle_t h_h;      // depth
+    starpu_data_handle_t olr_h;    // overland routing
+    starpu_data_handle_t mask_h;   // mask
+    starpu_data_handle_t maxh_h;   // maximum depth
+    starpu_data_handle_t vol_h;    // volume
+    starpu_data_handle_t inth_h;   // integral of depth
 
     // StarPU data handles (infiltration)
-    starpu_data_handle_t hcon_h;  // conductivity
-    starpu_data_handle_t vsat_h;  // saturation volume
-    starpu_data_handle_t p2_h;    // second term in GA model
+    starpu_data_handle_t hcon_h;   // conductivity
+    starpu_data_handle_t vsat_h;   // saturation volume
+    starpu_data_handle_t p2_h;     // second term in GA model
   
+    // StarPU data handles (diffusive routing)
+    // @todo register arrary data with StarPU
+    // @todo apply StarPU vector filter on these data
+    starpu_data_handle_t ele_h;    // elevation
+    starpu_data_handle_t n_h;      // Manning's N
+    starpu_data_handle_t store_h;  // storage ponds or lakes
+    starpu_data_handle_t olrdim0_old_h;  // overland routing, x-component @ time moment n-1
+    starpu_data_handle_t olrdim1_old_h;  // overland routing, y-component @ time moment n-1
+
     // StarPU vector block filter for precipitation and retention data arrays
     struct starpu_data_filter block_filter;
 
@@ -84,8 +111,8 @@ class WaterShed {
   real_t    *_VOL;        // volume
   real_t    *_OLR;        // overland routing
   real_t    *_PRE;        // precipitation 
-  real_t    *_N;          // manning's N
-  real_t    *_STORE;      // storage ponds, or lakes
+  real_t    *_N;          // Manning's N
+  real_t    *_STORE;      // storage ponds or lakes
   real_t    *_RET;        // retention capability, for intercept
 
   real_t    *_MAXH;       // max depth

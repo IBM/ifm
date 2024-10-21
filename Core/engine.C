@@ -136,9 +136,11 @@ void Engine::run(uint64_t kk, real_t dt, bool infiltrate_flag)
     _ws.comp_infiltration_starpu(dt);
   }
 #endif
+
   _ws.CompDiffusiveRouting(dt);
   // _ws.comp_diffusive_routing_starpu(dt);
   _ws.CompOutlet(dt);
+
   // _ws.comp_outlet_starpu(dt);
   // _ws.comp_storm_starpu(dt);
 
@@ -185,6 +187,7 @@ void Engine::profile_run(uint64_t kk, real_t dt, bool infiltrate_flag,
     *t_infiltration += (starpu_timing_now() - t_infiltration_0);
   }
 #endif
+
   double t_diffusive_0 = starpu_timing_now();
   _ws.CompDiffusiveRouting(dt);
   // _ws.comp_diffusive_routing_starpu(dt);

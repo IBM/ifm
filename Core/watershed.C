@@ -6,8 +6,8 @@
  * @email  <main author's email>
  * @author  Maksims Abalenkovs
  * @email   maksims.abalenkovs@stfc.ac.uk
- * @date    Oct 8, 2024
- * @version 1.4
+ * @date    Oct 16, 2024
+ * @version 1.5
  */
 
 #include <assert.h>
@@ -972,97 +972,125 @@ struct starpu_codelet diffusive_routing_cl {
 };
 
 // Computes diffusive routing
-// @note Uses StarPU for shared-memory parallelism
 int WaterShed::comp_diffusive_routing_starpu(real_t dt) {
 
-    // number of StarPU blocks
-    // @todo change value in future
-    int const NBLOCKS = 8;
+    // StarPU status
+    int status = 0;
 
-    // define StarPU handles for data arrays
-    starpu_data_handle_t mask_h, ele_h, h_h, n_h, store_h, olrdim0_old_h, olrdim1_old_h, olr_h;
+    // no. of CPUs controlled by StarPU
+    int np = starpu_cpu_worker_get_count();
 
-    // register data arrays with StarPU
-    // @todo check array sizes
-    starpu_vector_data_register(&mask_h,        0, (uintptr_t)_MASK,        _store_size, sizeof(_MASK[0]));
-    starpu_vector_data_register(&ele_h,         0, (uintptr_t)_ELE,         _store_size, sizeof(_ELE[0]));
-    starpu_vector_data_register(&h_h,           0, (uintptr_t)_H,           _store_size, sizeof(_H[0]));
-    starpu_vector_data_register(&n_h,           0, (uintptr_t)_N,           _store_size, sizeof(_N[0]));
-    starpu_vector_data_register(&store_h,       0, (uintptr_t)_STORE,       _store_size, sizeof(_STORE[0]));
-    starpu_vector_data_register(&olrdim0_old_h, 0, (uintptr_t)_OLRDIM0_OLD, _store_size, sizeof(_OLRDIM0_OLD[0]));
-    starpu_vector_data_register(&olrdim1_old_h, 0, (uintptr_t)_OLRDIM1_OLD, _store_size, sizeof(_OLRDIM1_OLD[0]));
-    starpu_vector_data_register(&olr_h,         0, (uintptr_t)_OLR,         _store_size, sizeof(_OLR[0]));
+    // row size of matrix block
+    int pi = NB;
 
-    // divide data arrays into blocks
-    struct starpu_data_filter block_filter = {
-        .filter_func = starpu_vector_filter_block,
-        .nchildren   = NBLOCKS,
-    };
+    // row size of last matrix block
+    int pn = pi;
 
-    starpu_data_partition(mask_h,        &block_filter);
-    starpu_data_partition(ele_h,         &block_filter);
-    starpu_data_partition(h_h,           &block_filter);
-    starpu_data_partition(n_h,           &block_filter);
-    starpu_data_partition(store_h,       &block_filter);
-    starpu_data_partition(olrdim0_old_h, &block_filter);
-    starpu_data_partition(olrdim1_old_h, &block_filter);
-    starpu_data_partition(olr_h,         &block_filter);
+    // column size of matrix block
+    int qi = _ncol;
 
-    // for each block do: submit StarPU tasks non-blockingly
-    for (int b = 0; b < NBLOCKS; b++) {
+    // no. of blocks
+    int nt = _nrow/pi;
 
-        // obtain handles for blocks
-        starpu_data_handle_t mask_nb_h, ele_nb_h, h_nb_h, n_nb_h, store_nb_h, olrdim0_old_nb_h, olrdim1_old_nb_h, olr_nb_h;
+    // add one more block if necessary
+    if (_nrow%pi > 0) {
+        nt++;
+        pn = _nrow%pi;
+    }
 
-        mask_nb_h        = starpu_data_get_sub_data(mask_h,        1, b);
-        ele_nb_h         = starpu_data_get_sub_data(ele_h,         1, b);
-        h_nb_h           = starpu_data_get_sub_data(h_h,           1, b);
-        n_nb_h           = starpu_data_get_sub_data(n_h,           1, b);
-        store_nb_h       = starpu_data_get_sub_data(store_h,       1, b);
-        olrdim0_old_nb_h = starpu_data_get_sub_data(olrdim0_old_h, 1, b);
-        olrdim1_old_nb_h = starpu_data_get_sub_data(olrdim1_old_h, 1, b);
-        olr_nb_h         = starpu_data_get_sub_data(olr_h,         1, b);
+    // allocate array of matrix blocks
+    mtrx_blk *mask_blk = (mtrx_blk*) malloc(nt*sizeof(mtrx_blk));
+
+    // initialise matrix blocks
+    for (int k = 0; k < nt; k++) {
+
+        mask_blk[k] = (mtrx_blk) {
+            .M.i = &_MASK[k*_ncol*pi], .k = k, .p = pi, .q = qi, .m = _nrow, .n = _ncol, .r = k % np,
+        };
+    }
+
+    // omit processing of last row
+    // ---------------------------
+    // block contains one row only
+    if (pn == 1) {
+        nt--;
+    }
+    // block contains more than one row
+    else {
+        // change row size of last matrix block
+        mask_blk[nt-1].p = pn-1;
+    }
+
+    // define StarPU handles for matrix blocks
+    starpu_data_handle_t *mask_blk_h =
+        (starpu_data_handle_t*) malloc(nt*sizeof(starpu_data_handle_t));
+
+    // for each matrix block
+    for (int k = 0; k < nt; k++) {
+
+        // create pointer to matrix block
+        mtrx_blk *mask = &mask_blk[k];
+
+        // register matrix block with StarPU
+        starpu_vector_data_register(
+            &mask_blk_h[k],
+            STARPU_MAIN_RAM,
+            (uintptr_t)mask->M,
+            mask->p * mask->q,
+            sizeof(mask->M[0]));
 
         // submit StarPU task
-        starpu_task_insert(
+        status = starpu_task_insert(
             &diffusive_routing_cl,
-            STARPU_R,  mask_nb_h,
-            STARPU_R,  ele_nb_h,
-            STARPU_R,  h_nb_h,
-            STARPU_R,  n_nb_h,
-            STARPU_R,  store_nb_h,
-            STARPU_RW, olrdim0_old_nb_h,
-            STARPU_RW, olrdim1_old_nb_h,
-            STARPU_RW, olr_nb_h,
+            STARPU_R,  mask_blk_h[k],
+            // STARPU_R,  ele_nb_h,
+            // STARPU_R,  h_nb_h,
+            // STARPU_R,  n_nb_h,
+            // STARPU_R,  store_nb_h,
+            // STARPU_RW, olrdim0_old_nb_h,
+            // STARPU_RW, olrdim1_old_nb_h,
+            // STARPU_RW, olr_nb_h,
+
+            STARPU_VALUE, &mask->k,  sizeof(&mask->k),
+            STARPU_VALUE, &mask->p,  sizeof(&mask->p),
+            STARPU_VALUE, &mask->q,  sizeof(&mask->q),
+            STARPU_VALUE, &mask->m,  sizeof(&mask->m),
+            STARPU_VALUE, &mask->n,  sizeof(&mask->n),
+            STARPU_VALUE, &mask->r,  sizeof(&mask->r),
+
             STARPU_VALUE, &_gsz,  sizeof(_gsz),
             STARPU_VALUE, &dt,    sizeof(dt),
             STARPU_VALUE, &_nrow, sizeof(_nrow),
             STARPU_VALUE, &_ncol, sizeof(_ncol),
             0);
+
+        STARPU_CHECK_RETURN_VALUE(status, "starpu_task_insert");
     }
 
     // wait for all tasks submitted so far
-    starpu_task_wait_for_all();
+    // starpu_task_wait_for_all();
 
     // unpartition data
-    starpu_data_unpartition(mask_h,        0);
-    starpu_data_unpartition(ele_h,         0);
-    starpu_data_unpartition(h_h,           0);
-    starpu_data_unpartition(n_h,           0);
-    starpu_data_unpartition(store_h,       0);
-    starpu_data_unpartition(olrdim0_old_h, 0);
-    starpu_data_unpartition(olrdim1_old_h, 0);
-    starpu_data_unpartition(olr_h,         0);
+    // starpu_data_unpartition(mask_h,        0);
+    // starpu_data_unpartition(ele_h,         0);
+    // starpu_data_unpartition(h_h,           0);
+    // starpu_data_unpartition(n_h,           0);
+    // starpu_data_unpartition(store_h,       0);
+    // starpu_data_unpartition(olrdim0_old_h, 0);
+    // starpu_data_unpartition(olrdim1_old_h, 0);
+    // starpu_data_unpartition(olr_h,         0);
 
     // unregister data arrays
-    starpu_data_unregister(mask_h);
-    starpu_data_unregister(ele_h);
-    starpu_data_unregister(h_h);
-    starpu_data_unregister(n_h);
-    starpu_data_unregister(store_h);
-    starpu_data_unregister(olrdim0_old_h);
-    starpu_data_unregister(olrdim1_old_h);
-    starpu_data_unregister(olr_h);
+    // starpu_data_unregister(mask_h);
+    // starpu_data_unregister(ele_h);
+    // starpu_data_unregister(h_h);
+    // starpu_data_unregister(n_h);
+    // starpu_data_unregister(store_h);
+    // starpu_data_unregister(olrdim0_old_h);
+    // starpu_data_unregister(olrdim1_old_h);
+    // starpu_data_unregister(olr_h);
+
+    // @todo unregister matrix blocks from StarPU
 
     return 0;
 }
@@ -1072,10 +1100,30 @@ int WaterShed::CompDiffusiveRouting(real_t dt) {
 
     // printf("Entering 'WaterShed::CompDiffusiveRouting'...\n");
 
+    // StarPU call status
+    int status;
+
   uint64_t cur,top,rgt;
   real_t cellsize = _gsz;   // we might need more for openMP
   const real_t chicken = -real_sqrt(REAL_EPSILON);
   const real_t cfl = 0.7*cellsize*cellsize/dt;
+
+  // @todo remove after diffusive routing is converted to StarPU
+  // starpu_data_acquire(olr_h,   STARPU_RW);
+  // STARPU_CHECK_RETURN_VALUE(status, "starpu_data_acquire @ olr_h");
+
+  // starpu_data_acquire(mask_h,  STARPU_R);
+  // STARPU_CHECK_RETURN_VALUE(status, "starpu_data_acquire @ mask_h");
+
+  // starpu_data_acquire(_ELE_h,   STARPU_R);
+  // starpu_data_acquire(h_h,     STARPU_R);
+  // STARPU_CHECK_RETURN_VALUE(status, "starpu_data_acquire @ h_h");
+
+  // starpu_data_acquire(_N_h,     STARPU_R);
+  // starpu_data_acquire(_STORE_h, STARPU_R);
+  // starpu_data_acquire(_OLRDIM0_OLD_h, STARPU_RW);
+  // starpu_data_acquire(_OLRDIM1_OLD_h, STARPU_RW);
+  starpu_pause();
 
   memset(_OLR, 0, _store_size*sizeof(real_t));  // reset overland
 
@@ -1089,7 +1137,7 @@ int WaterShed::CompDiffusiveRouting(real_t dt) {
   for (cur=0; cur<(_nrow)*(_ncol); cur++) {
     if (cur/_ncol < _nrow-1) {
       top = cur+_ncol;
-      // initialize 
+      // initialize
       tmpsf=0.0;
       tmpn=1.0;  // tmpn first use on denominator, avoid NaN
       tmph=0.0;
@@ -1204,6 +1252,17 @@ int WaterShed::CompDiffusiveRouting(real_t dt) {
 
     // printf("Exiting 'WaterShed::CompDiffusiveRouting'...\n");
 
+  // @todo remove after outlet and storm computation are converted to StarPU
+  starpu_resume();
+  // starpu_data_release(olr_h);
+  // starpu_data_release(mask_h);
+  // starpu_data_release(_ELE_h);
+  // starpu_data_release(h_h);
+  // starpu_data_release(_N_h);
+  // starpu_data_release(_STORE_h);
+  // starpu_data_release(_OLRDIM0_OLD_h);
+  // starpu_data_release(_OLRDIM1_OLD_h);
+
   return 0;
 }
 
@@ -1288,7 +1347,7 @@ int WaterShed::comp_outlet_starpu(real_t dt) {
         // divide arrays into blocks
         struct starpu_data_filter block_filter = {
             .filter_func = starpu_vector_filter_block,
-            .nchildren   = NBLOCKS,
+            .nchildren   = nt,
         };
     
         starpu_data_partition(outlets_h,    &block_filter);
@@ -1300,7 +1359,7 @@ int WaterShed::comp_outlet_starpu(real_t dt) {
         real_t dtdx2 = dt/(_gsz*_gsz);
     
         // for each _outlet_ block do: submit StarPU tasks non-blockingly
-        for (int b = 0; b < NBLOCKS; b++) {
+        for (int b = 0; b < nt; b++) {
     
             // obtain handles for _outlet_ blocks
             starpu_data_handle_t outlets_nb_h    = starpu_data_get_sub_data(outlets_h,    1, b);
