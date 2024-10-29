@@ -6,8 +6,8 @@
  * @email  <main author's email>
  * @author  Maksims Abalenkovs
  * @email   maksims.abalenkovs@stfc.ac.uk
- * @date    Oct 16, 2024
- * @version 1.5
+ * @date    Oct 29, 2024
+ * @version 1.6
  */
 
 #include <assert.h>
@@ -761,40 +761,36 @@ int WaterShed::CompInfiltration(real_t dt) {
 }
 
 // StarPU diffusive routing kernel function for CPU execution
-// @todo Apply two dimensional filter to divide data arrays
-// @todo Think how to omit calculation in boundary regions (last row, last column)
 void diffusive_routing_cpu_func(void *buffers[], void *cl_args) {
 
-    // retrieve data array vector handles
-    struct starpu_vector_interface *mask_h        = (starpu_vector_interface*) buffers[0];
-    struct starpu_vector_interface *ele_h         = (starpu_vector_interface*) buffers[1];
-    struct starpu_vector_interface *h_h           = (starpu_vector_interface*) buffers[2];
-    struct starpu_vector_interface *n_h           = (starpu_vector_interface*) buffers[3];
-    struct starpu_vector_interface *store_h       = (starpu_vector_interface*) buffers[4];
-    struct starpu_vector_interface *olrdim0_old_h = (starpu_vector_interface*) buffers[5];
-    struct starpu_vector_interface *olrdim1_old_h = (starpu_vector_interface*) buffers[6];
-    struct starpu_vector_interface *olr_h         = (starpu_vector_interface*) buffers[7];
+    // obtain handles for matrix blocks
+    struct starpu_vector_interface *mask_h = (starpu_vector_interface*) buffers[0];
+    struct starpu_vector_interface  *ele_h = (starpu_vector_interface*) buffers[1];
+    struct starpu_vector_interface  *olr_h = (starpu_vector_interface*) buffers[2];
 
-    // obtain no. of elements and base pointers
-    int n = STARPU_VECTOR_GET_NX(mask_h);
-    real_t *_MASK        = (real_t*) STARPU_VECTOR_GET_PTR(mask_h);
-    real_t *_ELE         = (real_t*) STARPU_VECTOR_GET_PTR(ele_h);
-    real_t *_H           = (real_t*) STARPU_VECTOR_GET_PTR(h_h);
-    real_t *_N           = (real_t*) STARPU_VECTOR_GET_PTR(n_h);
-    real_t *_STORE       = (real_t*) STARPU_VECTOR_GET_PTR(store_h);
-    real_t *_OLRDIM0_OLD = (real_t*) STARPU_VECTOR_GET_PTR(olrdim0_old_h);
-    real_t *_OLRDIM1_OLD = (real_t*) STARPU_VECTOR_GET_PTR(olrdim1_old_h);
-    real_t *_OLR         = (real_t*) STARPU_VECTOR_GET_PTR(olr_h);
+    // matrix blocks
+    mtrx_blk_i16 _MASK;
+    mtrx_blk_f64 _ELE;
+    mtrx_blk_f64 _OLR;
+
+    // obtain matrix blocks
+    _MASK.M =  (int16_t*) STARPU_VECTOR_GET_PTR(mask_h);
+     _ELE.M = (double_t*) STARPU_VECTOR_GET_PTR( ele_h);
+     _OLR.M = (double_t*) STARPU_VECTOR_GET_PTR( olr_h);
 
     real_t   _gsz;
     real_t    dt;
     uint64_t _nrow;
     uint64_t _ncol;
-    // cellsize
-    // REAL_EPSILON
 
-    // obtain no. of rows and columns as inline arguments
-    starpu_codelet_unpack_args(cl_args, &_gsz, &dt, &_nrow, &_ncol);
+    // obtain scalar values as inline arguments
+    starpu_codelet_unpack_args(
+        cl_args,
+        &_MASK.k, &_MASK.p, &_MASK.q, &_MASK.m, &_MASK.n, &_MASK.r,
+         &_ELE.k,  &_ELE.p,  &_ELE.q,  &_ELE.m,  &_ELE.n,  &_ELE.r,
+         &_OLR.k,  &_OLR.p,  &_OLR.q,  &_OLR.m,  &_OLR.n,  &_OLR.r,
+        &_gsz, &dt, &_nrow, &_ncol
+    );
 
     uint64_t cur, top, rgt;
     real_t cellsize      = _gsz;
@@ -802,7 +798,7 @@ void diffusive_routing_cpu_func(void *buffers[], void *cl_args) {
     const real_t cfl     = 0.7*cellsize*cellsize/dt;
 
     // reset overland
-    memset(_OLR, 0, n*sizeof(real_t));
+    memset(_OLR.M, 0, _OLR.p*_OLR.q*sizeof(double_t));
 
     real_t  tmpsf, tmpn, tmph, tmpp;
     real_t  OLRDIM0, OLRDIM1;
@@ -817,11 +813,14 @@ void diffusive_routing_cpu_func(void *buffers[], void *cl_args) {
     // for (cur = 0; cur < (_nrow)*(_ncol); cur++) {
     //     if (cur/_ncol < _nrow-1) {
 
-    for (uint64_t i = 0; i < _nrow-1; i++) {
-        for (uint64_t j = 0; j < _ncol; j++) {
+    // process matrices in blockwise fashion, omit processing last row
+    for (uint64_t i = 0; i < _MASK.p; i++) {
+        for (uint64_t j = 0; j < _MASK.q; j++) {
 
-            cur = i*(_ncol)+j;
-            top = cur+_ncol;
+            cur = i*(_MASK.n)+j;
+
+            // @todo check 'top' contains correct value
+            top = cur+_MASK.n;
     
             // initialize 
             tmpsf = 0.0;
@@ -829,9 +828,9 @@ void diffusive_routing_cpu_func(void *buffers[], void *cl_args) {
             tmph  = 0.0;
             tmpp  = 0.0;
     
-            if (_MASK[cur] && _MASK[top]) {  // stupid checks, should do something smarter
+            if (_MASK.M[cur] && _MASK.M[top]) {  // stupid checks, should do something smarter
     
-                tmpsf = (_ELE[cur]-_ELE[top]+_H[cur]-_H[top])/cellsize + REAL_EPSILON;
+                tmpsf = (_ELE.M[cur]-_ELE.M[top]+_H[cur]-_H[top])/cellsize + REAL_EPSILON;
         
                 if (tmpsf >= 0.0) {
                     tmph = _H[cur];
@@ -883,18 +882,18 @@ void diffusive_routing_cpu_func(void *buffers[], void *cl_args) {
             }
       
             _OLRDIM0_OLD[cur] = OLRDIM0;
-            _OLR[cur] -= OLRDIM0;  // combine the routing in x
-            _OLR[top] += OLRDIM0;
+            _OLR.M[cur] -= OLRDIM0;  // combine the routing in x
+            _OLR.M[top] += OLRDIM0;
         }
     }
 
-    // @note Original loop range changed to omit processing last column of elements
-    //       This eliminated need for if statement
-    // for (cur = 0; cur < (_nrow)*(_ncol); cur++) {
-    //     if (cur%_ncol < _ncol-1) {
+    /*
+    // @todo modify matrix block structures to omit processing last column
+    // ...
 
-    for (uint64_t i = 0; i < _nrow; i++) {
-        for (uint64_t j = 0; j < _ncol-1; j++) {
+    // process matrices in blockwise fashion, omit processing last column
+    for (uint64_t i = 0; i < _MASK.p; i++) {
+        for (uint64_t j = 0; j < _MASK.q; j++) {
 
             cur = i*(_ncol)+j;
             rgt = cur+1;
@@ -906,7 +905,7 @@ void diffusive_routing_cpu_func(void *buffers[], void *cl_args) {
             tmpp  = 0.0;
     
             // stupid checks, should do more efficient
-            if (_MASK[cur] && _MASK[rgt]) {
+            if (_MASK.M[cur] && _MASK.M[rgt]) {
     
                 tmpsf = (_ELE[cur]-_ELE[rgt]+_H[cur]-_H[rgt])/cellsize + REAL_EPSILON;
                 if (tmpsf >= 0.0) {
@@ -962,13 +961,14 @@ void diffusive_routing_cpu_func(void *buffers[], void *cl_args) {
             _OLR[rgt] += OLRDIM1; 
         }
     }
+    */
 }
 
 // StarPU codelet for computing diffusive routing
 struct starpu_codelet diffusive_routing_cl {
     .cpu_func = {diffusive_routing_cpu_func},
-    .nbuffers = 8,
-    .modes    = {STARPU_R, STARPU_R, STARPU_R, STARPU_R, STARPU_R, STARPU_RW, STARPU_RW, STARPU_RW}
+    .nbuffers = 3,
+    .modes    = {STARPU_R, STARPU_RW, STARPU_R}
 };
 
 // Computes diffusive routing
@@ -978,34 +978,64 @@ int WaterShed::comp_diffusive_routing_starpu(real_t dt) {
     int status = 0;
 
     // no. of CPUs controlled by StarPU
-    int np = starpu_cpu_worker_get_count();
+    size_t np = starpu_cpu_worker_get_count();
 
     // row size of matrix block
-    int pi = NB;
+    size_t pi = NB;
 
     // row size of last matrix block
-    int pn = pi;
+    size_t pn = pi;
 
     // column size of matrix block
-    int qi = _ncol;
+    size_t qi = _ncol;
 
     // no. of blocks
-    int nt = _nrow/pi;
+    size_t nt = _nrow/pi;
 
-    // add one more block if necessary
-    if (_nrow%pi > 0) {
+    // add one more block, if necessary
+    size_t rem = _nrow%pi;
+
+    if (rem > 0) {
         nt++;
-        pn = _nrow%pi;
+        pn = rem;
     }
 
-    // allocate array of matrix blocks
-    mtrx_blk *mask_blk = (mtrx_blk*) malloc(nt*sizeof(mtrx_blk));
+    // allocate matrix blocks
+    mtrx_blk_i16 *mask_blk = (mtrx_blk_i16*) malloc(nt*sizeof(mtrx_blk_i16));
+    mtrx_blk_f64  *ele_blk = (mtrx_blk_f64*) malloc(nt*sizeof(mtrx_blk_f64));
+    mtrx_blk_f64  *olr_blk = (mtrx_blk_f64*) malloc(nt*sizeof(mtrx_blk_f64));
 
     // initialise matrix blocks
-    for (int k = 0; k < nt; k++) {
+    for (size_t k = 0; k < nt; k++) {
 
-        mask_blk[k] = (mtrx_blk) {
-            .M.i = &_MASK[k*_ncol*pi], .k = k, .p = pi, .q = qi, .m = _nrow, .n = _ncol, .r = k % np,
+        mask_blk[k] = (mtrx_blk_i16) {
+            .M = &_MASK[k*_ncol*pi],
+            .k =  k,
+            .p =  pi,
+            .q =  qi,
+            .m = _nrow,
+            .n = _ncol,
+            .r =  k % np,
+        };
+
+        ele_blk[k] = (mtrx_blk_f64) {
+            .M = &_ELE[k*_ncol*pi],
+            .k =  k,
+            .p =  pi,
+            .q =  qi,
+            .m = _nrow,
+            .n = _ncol,
+            .r =  k % np,
+        };
+
+        olr_blk[k] = (mtrx_blk_f64) {
+            .M = &_OLR[k*_ncol*pi],
+            .k =  k,
+            .p =  pi,
+            .q =  qi,
+            .m = _nrow,
+            .n = _ncol,
+            .r =  k % np,
         };
     }
 
@@ -1013,84 +1043,120 @@ int WaterShed::comp_diffusive_routing_starpu(real_t dt) {
     // ---------------------------
     // block contains one row only
     if (pn == 1) {
+
+        // omit processing entire block
         nt--;
     }
     // block contains more than one row
     else {
+
         // change row size of last matrix block
         mask_blk[nt-1].p = pn-1;
+         ele_blk[nt-1].p = pn-1;
+         olr_blk[nt-1].p = pn-1;
     }
 
-    // define StarPU handles for matrix blocks
+    // create StarPU handles for matrix blocks
     starpu_data_handle_t *mask_blk_h =
         (starpu_data_handle_t*) malloc(nt*sizeof(starpu_data_handle_t));
 
-    // for each matrix block
-    for (int k = 0; k < nt; k++) {
+    starpu_data_handle_t *ele_blk_h =
+        (starpu_data_handle_t*) malloc(nt*sizeof(starpu_data_handle_t));
 
-        // create pointer to matrix block
-        mtrx_blk *mask = &mask_blk[k];
+    starpu_data_handle_t *olr_blk_h =
+        (starpu_data_handle_t*) malloc(nt*sizeof(starpu_data_handle_t));
 
-        // register matrix block with StarPU
+    // for each matrix block do
+    for (size_t k = 0; k < nt; k++) {
+
+        // create pointers to matrix blocks
+        mtrx_blk_i16 *m = &mask_blk[k];
+        mtrx_blk_f64 *e =  &ele_blk[k];
+        mtrx_blk_f64 *o =  &olr_blk[k];
+
+        // register matrix blocks with StarPU
         starpu_vector_data_register(
             &mask_blk_h[k],
             STARPU_MAIN_RAM,
-            (uintptr_t)mask->M,
-            mask->p * mask->q,
-            sizeof(mask->M[0]));
+            (uintptr_t)m->M,
+            m->p * m->q,
+            sizeof(m->M[0])
+        );
+
+        starpu_vector_data_register(
+            &ele_blk_h[k],
+            STARPU_MAIN_RAM,
+            (uintptr_t)e->M,
+            e->p * e->q,
+            sizeof(e->M[0])
+        );
+
+        starpu_vector_data_register(
+            &olr_blk_h[k],
+            STARPU_MAIN_RAM,
+            (uintptr_t)o->M,
+            o->p * o->q,
+            sizeof(o->M[0])
+        );
 
         // submit StarPU task
         status = starpu_task_insert(
             &diffusive_routing_cl,
             STARPU_R,  mask_blk_h[k],
-            // STARPU_R,  ele_nb_h,
-            // STARPU_R,  h_nb_h,
-            // STARPU_R,  n_nb_h,
-            // STARPU_R,  store_nb_h,
-            // STARPU_RW, olrdim0_old_nb_h,
-            // STARPU_RW, olrdim1_old_nb_h,
-            // STARPU_RW, olr_nb_h,
+            STARPU_R,   ele_blk_h[k],
+            STARPU_RW,  olr_blk_h[k],
 
-            STARPU_VALUE, &mask->k,  sizeof(&mask->k),
-            STARPU_VALUE, &mask->p,  sizeof(&mask->p),
-            STARPU_VALUE, &mask->q,  sizeof(&mask->q),
-            STARPU_VALUE, &mask->m,  sizeof(&mask->m),
-            STARPU_VALUE, &mask->n,  sizeof(&mask->n),
-            STARPU_VALUE, &mask->r,  sizeof(&mask->r),
+            STARPU_VALUE, &m->k,  sizeof(&m->k),
+            STARPU_VALUE, &m->p,  sizeof(&m->p),
+            STARPU_VALUE, &m->q,  sizeof(&m->q),
+            STARPU_VALUE, &m->m,  sizeof(&m->m),
+            STARPU_VALUE, &m->n,  sizeof(&m->n),
+            STARPU_VALUE, &m->r,  sizeof(&m->r),
+
+            STARPU_VALUE, &e->k,  sizeof(&e->k),
+            STARPU_VALUE, &e->p,  sizeof(&e->p),
+            STARPU_VALUE, &e->q,  sizeof(&e->q),
+            STARPU_VALUE, &e->m,  sizeof(&e->m),
+            STARPU_VALUE, &e->n,  sizeof(&e->n),
+            STARPU_VALUE, &e->r,  sizeof(&e->r),
+
+            STARPU_VALUE, &o->k,  sizeof(&o->k),
+            STARPU_VALUE, &o->p,  sizeof(&o->p),
+            STARPU_VALUE, &o->q,  sizeof(&o->q),
+            STARPU_VALUE, &o->m,  sizeof(&o->m),
+            STARPU_VALUE, &o->n,  sizeof(&o->n),
+            STARPU_VALUE, &o->r,  sizeof(&o->r),
 
             STARPU_VALUE, &_gsz,  sizeof(_gsz),
             STARPU_VALUE, &dt,    sizeof(dt),
             STARPU_VALUE, &_nrow, sizeof(_nrow),
             STARPU_VALUE, &_ncol, sizeof(_ncol),
-            0);
+            0
+        );
 
         STARPU_CHECK_RETURN_VALUE(status, "starpu_task_insert");
     }
 
     // wait for all tasks submitted so far
-    // starpu_task_wait_for_all();
+    starpu_task_wait_for_all();
 
-    // unpartition data
-    // starpu_data_unpartition(mask_h,        0);
-    // starpu_data_unpartition(ele_h,         0);
-    // starpu_data_unpartition(h_h,           0);
-    // starpu_data_unpartition(n_h,           0);
-    // starpu_data_unpartition(store_h,       0);
-    // starpu_data_unpartition(olrdim0_old_h, 0);
-    // starpu_data_unpartition(olrdim1_old_h, 0);
-    // starpu_data_unpartition(olr_h,         0);
+    // unregister blocks from StarPU
+    for (size_t k = 0; k < nt; k++) {
 
-    // unregister data arrays
-    // starpu_data_unregister(mask_h);
-    // starpu_data_unregister(ele_h);
-    // starpu_data_unregister(h_h);
-    // starpu_data_unregister(n_h);
-    // starpu_data_unregister(store_h);
-    // starpu_data_unregister(olrdim0_old_h);
-    // starpu_data_unregister(olrdim1_old_h);
-    // starpu_data_unregister(olr_h);
+        starpu_data_unregister(mask_blk_h[k]);
+        starpu_data_unregister( ele_blk_h[k]);
+        starpu_data_unregister( olr_blk_h[k]);
+    }
 
-    // @todo unregister matrix blocks from StarPU
+    // free array of block handles
+    free(mask_blk_h);
+    free( ele_blk_h);
+    free( olr_blk_h);
+
+    // free array of blocks
+    free(mask_blk);
+    free( ele_blk);
+    free( olr_blk);
 
     return 0;
 }

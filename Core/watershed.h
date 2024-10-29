@@ -6,8 +6,8 @@
  * @email  <main author's email>
  * @author  Maksims Abalenkovs
  * @email   maksims.abalenkovs@stfc.ac.uk
- * @date    Oct 9, 2024
- * @version 1.4
+ * @date    Oct 29, 2024
+ * @version 1.6
  */
 
 #ifndef _WATERSHED_H
@@ -47,23 +47,29 @@
   } \
 } while(0)
 
-// Matrix data type
+// Custom data types
 
-// Matrix block
+// Matrix block (integer elements)
 typedef struct {
+    int16_t *M;  // pointer to first element in block
+    size_t   k;  // block index
+    size_t   p;  // no. of block rows
+    size_t   q;  // no. of block columns
+    size_t   m;  // no. of matrix rows
+    size_t   n;  // no. of matrix columns
+    size_t   r;  // MPI rank of block owner
+} mtrx_blk_i16;
 
-    union {
-        int    i;
-        double d;
-    } *M;   // pointer to first element in block
-
-    int k;  // block index
-    int p;  // no. of block rows
-    int q;  // no. of block columns
-    int m;  // no. of matrix rows
-    int n;  // no. of matrix columns
-    int r;  // MPI rank of block owner
-} mtrx_blk;
+// Matrix block (floating-point elements)
+typedef struct {
+    double_t *M;  // pointer to first element in block
+    size_t  k;    // block index
+    size_t  p;    // no. of block rows
+    size_t  q;    // no. of block columns
+    size_t  m;    // no. of matrix rows
+    size_t  n;    // no. of matrix columns
+    size_t  r;    // MPI rank of block owner
+} mtrx_blk_f64;
 
 // Forward declaration
 class Engine;
