@@ -62,13 +62,13 @@ typedef struct {
 
 // Matrix block (floating-point elements)
 typedef struct {
-    double_t *M;  // pointer to first element in block
-    size_t  k;    // block index
-    size_t  p;    // no. of block rows
-    size_t  q;    // no. of block columns
-    size_t  m;    // no. of matrix rows
-    size_t  n;    // no. of matrix columns
-    size_t  r;    // MPI rank of block owner
+    real_t *M;  // pointer to first element in block
+    size_t  k;  // block index
+    size_t  p;  // no. of block rows
+    size_t  q;  // no. of block columns
+    size_t  m;  // no. of matrix rows
+    size_t  n;  // no. of matrix columns
+    size_t  r;  // MPI rank of block owner
 } mtrx_blk_f64;
 
 // Forward declaration
