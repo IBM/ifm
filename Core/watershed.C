@@ -6,8 +6,8 @@
  * @email  <main author's email>
  * @author  Maksims Abalenkovs
  * @email   maksims.abalenkovs@stfc.ac.uk
- * @date    Oct 29, 2024
- * @version 1.6
+ * @date    Nov 1, 2024
+ * @version 1.8
  */
 
 #include <assert.h>
@@ -760,6 +760,21 @@ int WaterShed::CompInfiltration(real_t dt) {
   return 0;
 }
 
+// @brief Identifies, if given matrix block is last matrix block
+// @param[in] *a  pointer to given matrix block
+// @param[in]  kn index of last matrix block
+bool is_last_blk(mtrx_blk_i16 *a, int kn) {
+
+    return a->k == kn;
+}
+
+// @brief Identifies, if given matrix block is single row block
+// @param[in] *a pointer to given matrix block
+bool is_single_row(mtrx_blk_i16 *a) {
+
+    return a->p == 1;
+}
+
 // StarPU diffusive routing kernel function for CPU execution
 void diffusive_routing_cpu_func(void *buffers[], void *cl_args) {
 
@@ -773,7 +788,10 @@ void diffusive_routing_cpu_func(void *buffers[], void *cl_args) {
     struct starpu_vector_interface *olrdim0_old_h =
         (starpu_vector_interface*) buffers[5];
 
-    struct starpu_vector_interface   *olr_h = (starpu_vector_interface*) buffers[6];
+    struct starpu_vector_interface *olrdim1_old_h =
+        (starpu_vector_interface*) buffers[6];
+
+    struct starpu_vector_interface   *olr_h = (starpu_vector_interface*) buffers[7];
 
     // matrix blocks
     mtrx_blk_i16 _MASK;
@@ -782,21 +800,22 @@ void diffusive_routing_cpu_func(void *buffers[], void *cl_args) {
     mtrx_blk_f64 _N;
     mtrx_blk_f64 _STORE;
     mtrx_blk_f64 _OLRDIM0_OLD;
+    mtrx_blk_f64 _OLRDIM1_OLD;
     mtrx_blk_f64 _OLR;
 
     // obtain matrix blocks
-           _MASK.M =  (int16_t*) STARPU_VECTOR_GET_PTR( mask_h);
-            _ELE.M = (real_t*) STARPU_VECTOR_GET_PTR(  ele_h);
-              _H.M = (real_t*) STARPU_VECTOR_GET_PTR(    h_h);
-              _N.M = (real_t*) STARPU_VECTOR_GET_PTR(    n_h);
-          _STORE.M = (real_t*) STARPU_VECTOR_GET_PTR(store_h);
-    _OLRDIM0_OLD.M = (real_t*) STARPU_VECTOR_GET_PTR(olrdim0_old_h);
-            _OLR.M = (real_t*) STARPU_VECTOR_GET_PTR(  olr_h);
+           _MASK.M = (int16_t*) STARPU_VECTOR_GET_PTR( mask_h);
+            _ELE.M = (real_t*)  STARPU_VECTOR_GET_PTR(  ele_h);
+              _H.M = (real_t*)  STARPU_VECTOR_GET_PTR(    h_h);
+              _N.M = (real_t*)  STARPU_VECTOR_GET_PTR(    n_h);
+          _STORE.M = (real_t*)  STARPU_VECTOR_GET_PTR(store_h);
+    _OLRDIM0_OLD.M = (real_t*)  STARPU_VECTOR_GET_PTR(olrdim0_old_h);
+    _OLRDIM1_OLD.M = (real_t*)  STARPU_VECTOR_GET_PTR(olrdim1_old_h);
+            _OLR.M = (real_t*)  STARPU_VECTOR_GET_PTR(  olr_h);
 
     real_t   _gsz;
     real_t    dt;
-    uint64_t _nrow;
-    uint64_t _ncol;
+    uint32_t  nt;
 
     // obtain scalar values as inline arguments
     starpu_codelet_unpack_args(
@@ -807,8 +826,9 @@ void diffusive_routing_cpu_func(void *buffers[], void *cl_args) {
             &_N.k,     &_N.p,     &_N.q,     &_N.m,     &_N.n,     &_N.r,
         &_STORE.k, &_STORE.p, &_STORE.q, &_STORE.m, &_STORE.n, &_STORE.r,
         &_OLRDIM0_OLD.k, &_OLRDIM0_OLD.p, &_OLRDIM0_OLD.q, &_OLRDIM0_OLD.m, &_OLRDIM0_OLD.n, &_OLRDIM0_OLD.r,
+        &_OLRDIM1_OLD.k, &_OLRDIM1_OLD.p, &_OLRDIM1_OLD.q, &_OLRDIM1_OLD.m, &_OLRDIM1_OLD.n, &_OLRDIM1_OLD.r,
           &_OLR.k,   &_OLR.p,   &_OLR.q,   &_OLR.m,   &_OLR.n,   &_OLR.r,
-        &_gsz, &dt, &_nrow, &_ncol
+        &_gsz, &dt, &nt
     );
 
     uint64_t cur, top, rgt;
@@ -824,8 +844,36 @@ void diffusive_routing_cpu_func(void *buffers[], void *cl_args) {
     real_t  curfabs, oldfabs;
     int64_t mysign;
 
+    // save row size of matrix block
+    int p = _MASK.p;
+
+    // save column size of matrix block
+    int q = _MASK.q;
+
     // kernel body
-    // process matrices in blockwise fashion, omit processing last row
+    // ===========
+    // last matrix block -> omit processing of last row
+    // ------------------------------------------------
+    if (is_last_blk(&_MASK, nt-1)) {
+
+        // block contains one row only
+        if (is_single_row(&_MASK)) {
+
+            // omit processing entire block
+            _MASK.p = 0;
+            _MASK.q = 0;
+        }
+        // block contains more than one row
+        else {
+
+            // change row size of last matrix block
+            // @note omit processing of last row
+            _MASK.p--;
+        }
+    }
+
+    // process elements of matrix block
+    // omit processing last row of last matrix block
     for (uint64_t i = 0; i < _MASK.p; i++) {
         for (uint64_t j = 0; j < _MASK.q; j++) {
 
@@ -899,15 +947,32 @@ void diffusive_routing_cpu_func(void *buffers[], void *cl_args) {
         }
     }
 
-    /*
-    // @todo modify matrix block structures to omit processing last column
-    // ...
+    // last matrix block -> reinstate processing of last row
+    // -----------------------------------------------------
+    if (is_last_blk(&_MASK, nt-1)) {
 
-    // process matrices in blockwise fashion, omit processing last column
+        // block contains one row only
+        if (is_single_row(&_MASK)) {
+
+            // re-set block sizes
+            _MASK.p = p;
+            _MASK.q = q;
+        }
+        // block contains more than one row
+        else {
+
+            // change row size of last matrix block
+            // @note reinstate processing of last row
+            _MASK.p++;
+        }
+    }
+
+    // process elements of matrix block
+    // omit processing last column of all matrix blocks
     for (uint64_t i = 0; i < _MASK.p; i++) {
-        for (uint64_t j = 0; j < _MASK.q; j++) {
+        for (uint64_t j = 0; j < _MASK.q-1; j++) {
 
-            cur = i*(_ncol)+j;
+            cur = i*(_MASK.n)+j;
             rgt = cur+1;
     
             // initialize 
@@ -919,16 +984,16 @@ void diffusive_routing_cpu_func(void *buffers[], void *cl_args) {
             // stupid checks, should do more efficient
             if (_MASK.M[cur] && _MASK.M[rgt]) {
     
-                tmpsf = (_ELE[cur]-_ELE[rgt]+_H[cur]-_H[rgt])/cellsize + REAL_EPSILON;
+                tmpsf = (_ELE.M[cur]-_ELE.M[rgt]+_H.M[cur]-_H.M[rgt])/cellsize + REAL_EPSILON;
                 if (tmpsf >= 0.0) {
-                    tmph = _H[cur];
-                    tmpn = _N[cur];
-                    tmpp = _STORE[cur];
+                    tmph = _H.M[cur];
+                    tmpn = _N.M[cur];
+                    tmpp = _STORE.M[cur];
                 }
                 else {
-                    tmph = _H[rgt];
-                    tmpn = _N[rgt];
-                    tmpp = _STORE[rgt];
+                    tmph = _H.M[rgt];
+                    tmpn = _N.M[rgt];
+                    tmpp = _STORE.M[rgt];
                 }
         
                 // tmpt[cur] = _H[cur] < _H[rgt] ? _H[cur] : _H[rgt];
@@ -946,13 +1011,13 @@ void diffusive_routing_cpu_func(void *buffers[], void *cl_args) {
     
             mysign  = MY_SIGN(OLRDIM1);
             curfabs = real_fabs(OLRDIM1);
-            oldfabs = real_fabs(_OLRDIM1_OLD[cur]);
+            oldfabs = real_fabs(_OLRDIM1_OLD.M[cur]);
     
             // bounding
-            if (real_fabs(_OLRDIM1_OLD[cur]) < 1e-6) {
+            if (real_fabs(_OLRDIM1_OLD.M[cur]) < 1e-6) {
                 // no-op
             }
-            else if (mysign != MY_SIGN(_OLRDIM1_OLD[cur])) {
+            else if (mysign != MY_SIGN(_OLRDIM1_OLD.M[cur])) {
     
                 if (curfabs > oldfabs) {
                     OLRDIM1 = mysign*oldfabs;
@@ -968,19 +1033,18 @@ void diffusive_routing_cpu_func(void *buffers[], void *cl_args) {
                 OLRDIM1 = mysign*cfl;
             }
     
-            _OLRDIM1_OLD[cur] = OLRDIM1;
-            _OLR[cur] -= OLRDIM1;  // combine the routing in y
-            _OLR[rgt] += OLRDIM1; 
+            _OLRDIM1_OLD.M[cur] = OLRDIM1;
+            _OLR.M[cur] -= OLRDIM1;  // combine the routing in y
+            _OLR.M[rgt] += OLRDIM1; 
         }
     }
-    */
 }
 
 // StarPU codelet for computing diffusive routing
 struct starpu_codelet diffusive_routing_cl {
     .cpu_func = {diffusive_routing_cpu_func},
-    .nbuffers = 7,
-    .modes    = {STARPU_R, STARPU_RW, STARPU_R, STARPU_R, STARPU_R, STARPU_RW, STARPU_R}
+    .nbuffers = 8,
+    .modes    = {STARPU_R, STARPU_RW, STARPU_R, STARPU_R, STARPU_R, STARPU_RW, STARPU_RW, STARPU_R}
 };
 
 // Computes diffusive routing
@@ -996,21 +1060,14 @@ int WaterShed::comp_diffusive_routing_starpu(real_t dt) {
     size_t pi = NB;
 
     // row size of last matrix block
-    size_t pn = pi;
+    size_t rem =  _nrow%pi;
+    size_t pn  = (rem > 0) ? rem : pi;
 
     // column size of matrix block
     size_t qi = _ncol;
 
     // no. of blocks
-    size_t nt = _nrow/pi;
-
-    // add one more block, if necessary
-    size_t rem = _nrow%pi;
-
-    if (rem > 0) {
-        nt++;
-        pn = rem;
-    }
+    size_t nt = ceil(_nrow/pi);
 
     // allocate matrix blocks
     mtrx_blk_i16        *mask_blk = (mtrx_blk_i16*) malloc(nt*sizeof(mtrx_blk_i16));
@@ -1019,6 +1076,7 @@ int WaterShed::comp_diffusive_routing_starpu(real_t dt) {
     mtrx_blk_f64           *n_blk = (mtrx_blk_f64*) malloc(nt*sizeof(mtrx_blk_f64));
     mtrx_blk_f64       *store_blk = (mtrx_blk_f64*) malloc(nt*sizeof(mtrx_blk_f64));
     mtrx_blk_f64 *olrdim0_old_blk = (mtrx_blk_f64*) malloc(nt*sizeof(mtrx_blk_f64));
+    mtrx_blk_f64 *olrdim1_old_blk = (mtrx_blk_f64*) malloc(nt*sizeof(mtrx_blk_f64));
     mtrx_blk_f64         *olr_blk = (mtrx_blk_f64*) malloc(nt*sizeof(mtrx_blk_f64));
 
     // initialise matrix blocks
@@ -1084,6 +1142,16 @@ int WaterShed::comp_diffusive_routing_starpu(real_t dt) {
             .r =  k % np,
         };
 
+        olrdim1_old_blk[k] = (mtrx_blk_f64) {
+            .M = &_OLRDIM1_OLD[k*_ncol*pi],
+            .k = k,
+            .p = pi,
+            .q = qi,
+            .m = _nrow,
+            .n = _ncol,
+            .r = k % np,
+        };
+
         olr_blk[k] = (mtrx_blk_f64) {
             .M = &_OLR[k*_ncol*pi],
             .k =  k,
@@ -1093,27 +1161,6 @@ int WaterShed::comp_diffusive_routing_starpu(real_t dt) {
             .n = _ncol,
             .r =  k % np,
         };
-    }
-
-    // omit processing of last row
-    // ---------------------------
-    // block contains one row only
-    if (pn == 1) {
-
-        // omit processing entire block
-        nt--;
-    }
-    // block contains more than one row
-    else {
-
-        // change row size of last matrix block
-               mask_blk[nt-1].p = pn-1;
-                ele_blk[nt-1].p = pn-1;
-                  h_blk[nt-1].p = pn-1;
-                  n_blk[nt-1].p = pn-1;
-              store_blk[nt-1].p = pn-1;
-        olrdim0_old_blk[nt-1].p = pn-1;
-                olr_blk[nt-1].p = pn-1;
     }
 
     // create StarPU handles for matrix blocks
@@ -1135,6 +1182,9 @@ int WaterShed::comp_diffusive_routing_starpu(real_t dt) {
     starpu_data_handle_t *olrdim0_old_blk_h =
         (starpu_data_handle_t*) malloc(nt*sizeof(starpu_data_handle_t));
 
+    starpu_data_handle_t *olrdim1_old_blk_h =
+        (starpu_data_handle_t*) malloc(nt*sizeof(starpu_data_handle_t));
+
     starpu_data_handle_t *olr_blk_h =
         (starpu_data_handle_t*) malloc(nt*sizeof(starpu_data_handle_t));
 
@@ -1142,13 +1192,14 @@ int WaterShed::comp_diffusive_routing_starpu(real_t dt) {
     for (size_t k = 0; k < nt; k++) {
 
         // create pointers to matrix blocks
-        mtrx_blk_i16 *m =        &mask_blk[k];
-        mtrx_blk_f64 *e =         &ele_blk[k];
-        mtrx_blk_f64 *h =           &h_blk[k];
-        mtrx_blk_f64 *n =           &n_blk[k];
-        mtrx_blk_f64 *s =       &store_blk[k];
-        mtrx_blk_f64 *l = &olrdim0_old_blk[k];
-        mtrx_blk_f64 *o =         &olr_blk[k];
+        mtrx_blk_i16 *m  =        &mask_blk[k];
+        mtrx_blk_f64 *e  =         &ele_blk[k];
+        mtrx_blk_f64 *h  =           &h_blk[k];
+        mtrx_blk_f64 *n  =           &n_blk[k];
+        mtrx_blk_f64 *s  =       &store_blk[k];
+        mtrx_blk_f64 *r0 = &olrdim0_old_blk[k];
+        mtrx_blk_f64 *r1 = &olrdim1_old_blk[k];
+        mtrx_blk_f64 *o  =         &olr_blk[k];
 
         // register matrix blocks with StarPU
         starpu_vector_data_register(
@@ -1194,9 +1245,17 @@ int WaterShed::comp_diffusive_routing_starpu(real_t dt) {
         starpu_vector_data_register(
             &olrdim0_old_blk_h[k],
             STARPU_MAIN_RAM,
-            (uintptr_t)l->M,
-            l->p * l->q,
-            sizeof(l->M[0])
+            (uintptr_t)r0->M,
+            r0->p * r0->q,
+            sizeof(r0->M[0])
+        );
+
+        starpu_vector_data_register(
+            &olrdim1_old_blk_h[k],
+            STARPU_MAIN_RAM,
+            (uintptr_t)r1->M,
+            r1->p * r1->q,
+            sizeof(r1->M[0])
         );
 
         starpu_vector_data_register(
@@ -1217,6 +1276,7 @@ int WaterShed::comp_diffusive_routing_starpu(real_t dt) {
             STARPU_R,            n_blk_h[k],
             STARPU_R,        store_blk_h[k],
             STARPU_RW, olrdim0_old_blk_h[k],
+            STARPU_RW, olrdim1_old_blk_h[k],
             STARPU_RW,         olr_blk_h[k],
 
             STARPU_VALUE, &m->k,  sizeof(&m->k),
@@ -1254,12 +1314,19 @@ int WaterShed::comp_diffusive_routing_starpu(real_t dt) {
             STARPU_VALUE, &s->n,  sizeof(&s->n),
             STARPU_VALUE, &s->r,  sizeof(&s->r),
 
-            STARPU_VALUE, &l->k,  sizeof(&l->k),
-            STARPU_VALUE, &l->p,  sizeof(&l->p),
-            STARPU_VALUE, &l->q,  sizeof(&l->q),
-            STARPU_VALUE, &l->m,  sizeof(&l->m),
-            STARPU_VALUE, &l->n,  sizeof(&l->n),
-            STARPU_VALUE, &l->r,  sizeof(&l->r),
+            STARPU_VALUE, &r0->k,  sizeof(&r0->k),
+            STARPU_VALUE, &r0->p,  sizeof(&r0->p),
+            STARPU_VALUE, &r0->q,  sizeof(&r0->q),
+            STARPU_VALUE, &r0->m,  sizeof(&r0->m),
+            STARPU_VALUE, &r0->n,  sizeof(&r0->n),
+            STARPU_VALUE, &r0->r,  sizeof(&r0->r),
+
+            STARPU_VALUE, &r1->k,  sizeof(&r1->k),
+            STARPU_VALUE, &r1->p,  sizeof(&r1->p),
+            STARPU_VALUE, &r1->q,  sizeof(&r1->q),
+            STARPU_VALUE, &r1->m,  sizeof(&r1->m),
+            STARPU_VALUE, &r1->n,  sizeof(&r1->n),
+            STARPU_VALUE, &r1->r,  sizeof(&r1->r),
 
             STARPU_VALUE, &o->k,  sizeof(&o->k),
             STARPU_VALUE, &o->p,  sizeof(&o->p),
@@ -1270,8 +1337,7 @@ int WaterShed::comp_diffusive_routing_starpu(real_t dt) {
 
             STARPU_VALUE, &_gsz,  sizeof(_gsz),
             STARPU_VALUE, &dt,    sizeof(dt),
-            STARPU_VALUE, &_nrow, sizeof(_nrow),
-            STARPU_VALUE, &_ncol, sizeof(_ncol),
+            STARPU_VALUE, &nt,    sizeof(nt),
             0
         );
 
@@ -1290,29 +1356,33 @@ int WaterShed::comp_diffusive_routing_starpu(real_t dt) {
         starpu_data_unregister(          n_blk_h[k]);
         starpu_data_unregister(      store_blk_h[k]);
         starpu_data_unregister(olrdim0_old_blk_h[k]);
+        starpu_data_unregister(olrdim1_old_blk_h[k]);
         starpu_data_unregister(        olr_blk_h[k]);
     }
 
-    // free array of block handles
+    // free arrays of block handles
     free(       mask_blk_h);
     free(        ele_blk_h);
     free(          h_blk_h);
     free(          n_blk_h);
     free(      store_blk_h);
     free(olrdim0_old_blk_h);
+    free(olrdim1_old_blk_h);
     free(        olr_blk_h);
 
-    // free array of blocks
+    // free arrays of blocks
     free(       mask_blk);
     free(        ele_blk);
     free(          h_blk);
     free(          n_blk);
     free(      store_blk);
     free(olrdim0_old_blk);
+    free(olrdim1_old_blk);
     free(        olr_blk);
 
     return 0;
 }
+
 
 // Computes diffusive routing
 int WaterShed::CompDiffusiveRouting(real_t dt) {

@@ -6,8 +6,8 @@
  * @email  <main author's email>
  * @author  Maksims Abalenkovs
  * @email   maksims.abalenkovs@stfc.ac.uk
- * @date    Oct 29, 2024
- * @version 1.6
+ * @date    Nov 1, 2024
+ * @version 1.8
  */
 
 #ifndef _WATERSHED_H

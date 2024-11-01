@@ -6,8 +6,8 @@
  * @email  <main author's email>
  * @author  Maksims Abalenkovs
  * @email   maksims.abalenkovs@stfc.ac.uk
- * @date    Oct 8, 2024
- * @version 1.4
+ * @date    Nov 1, 2024
+ * @version 1.8
  */
 
 #include <ctype.h>
@@ -137,8 +137,8 @@ void Engine::run(uint64_t kk, real_t dt, bool infiltrate_flag)
   }
 #endif
 
-  _ws.CompDiffusiveRouting(dt);
-  // _ws.comp_diffusive_routing_starpu(dt);
+  // _ws.CompDiffusiveRouting(dt);
+  _ws.comp_diffusive_routing_starpu(dt);
   _ws.CompOutlet(dt);
 
   // _ws.comp_outlet_starpu(dt);
@@ -189,8 +189,8 @@ void Engine::profile_run(uint64_t kk, real_t dt, bool infiltrate_flag,
 #endif
 
   double t_diffusive_0 = starpu_timing_now();
-  _ws.CompDiffusiveRouting(dt);
-  // _ws.comp_diffusive_routing_starpu(dt);
+  // _ws.CompDiffusiveRouting(dt);
+  _ws.comp_diffusive_routing_starpu(dt);
   *t_diffusive += (starpu_timing_now() - t_diffusive_0);
 
   double t_outlet_0 = starpu_timing_now();
