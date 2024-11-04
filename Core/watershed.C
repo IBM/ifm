@@ -6,8 +6,8 @@
  * @email  <main author's email>
  * @author  Maksims Abalenkovs
  * @email   maksims.abalenkovs@stfc.ac.uk
- * @date    Nov 1, 2024
- * @version 1.8
+ * @date    Nov 4, 2024
+ * @version 1.9
  */
 
 #include <assert.h>
@@ -28,7 +28,7 @@
 void WaterShed::Setup(uint64_t nrow, uint64_t ncol, real_t gsize, real_t llx, real_t lly) {
   //uint64_t mysize;
 
-  assert( nrow>0 && ncol>0);
+  assert( nrow > 0 && ncol > 0 );
   assert( gsize > 0.0 );
 
   _nrow = nrow;
@@ -39,20 +39,20 @@ void WaterShed::Setup(uint64_t nrow, uint64_t ncol, real_t gsize, real_t llx, re
   _llx = llx;
   _lly = lly;
 
-  _ELE = (real_t*) malloc(sizeof(real_t) * _store_size);
-  _H = (real_t*) malloc(sizeof(real_t) * _store_size);
-  _MAXH = (real_t*) malloc(sizeof(real_t) * _store_size);
-  _INTH = (real_t*) malloc(sizeof(real_t) * _store_size);
+  _ELE   = (real_t*) malloc(sizeof(real_t) * _store_size);
+  _H     = (real_t*) malloc(sizeof(real_t) * _store_size);
+  _MAXH  = (real_t*) malloc(sizeof(real_t) * _store_size);
+  _INTH  = (real_t*) malloc(sizeof(real_t) * _store_size);
 
-  _VOL = (real_t*) malloc(sizeof(real_t) * _store_size);
-  _OLR = (real_t*) malloc(sizeof(real_t) * _store_size);
-  _PRE = (real_t*) malloc(sizeof(real_t) * _store_size);
-  _N = (real_t*) malloc(sizeof(real_t) * _store_size);
+  _VOL   = (real_t*) malloc(sizeof(real_t) * _store_size);
+  _OLR   = (real_t*) malloc(sizeof(real_t) * _store_size);
+  _PRE   = (real_t*) malloc(sizeof(real_t) * _store_size);
+  _N     = (real_t*) malloc(sizeof(real_t) * _store_size);
   _STORE = (real_t*) malloc(sizeof(real_t) * _store_size);
-  _RET = (real_t*) malloc(sizeof(real_t) * _store_size);
-  _VSAT = (real_t*) malloc(sizeof(real_t) * _store_size);
-  _HCON = (real_t*) malloc(sizeof(real_t) * _store_size);
-  _P2 = (real_t*) malloc(sizeof(real_t) * _store_size);
+  _RET   = (real_t*) malloc(sizeof(real_t) * _store_size);
+  _VSAT  = (real_t*) malloc(sizeof(real_t) * _store_size);
+  _HCON  = (real_t*) malloc(sizeof(real_t) * _store_size);
+  _P2    = (real_t*) malloc(sizeof(real_t) * _store_size);
 
   //_tmpinf1 = (real_t*) malloc(sizeof(real_t) * _store_size);
   //_tmpinf2 = (real_t*) malloc(sizeof(real_t) * _store_size);
@@ -66,9 +66,9 @@ void WaterShed::Setup(uint64_t nrow, uint64_t ncol, real_t gsize, real_t llx, re
   _minTx = (real_t*)malloc(sizeof(real_t)* _store_size);
   _minTy = (real_t*)malloc(sizeof(real_t)* _store_size);
 
-  _MASK = (short*) malloc(sizeof(short) * _store_size);
+  _MASK     = (short*) malloc(sizeof(short) * _store_size);
   _IDX_SOIL = (short*) malloc(sizeof(short) * _store_size);
-  _IDX_N = (short*) malloc(sizeof(short) * _store_size);
+  _IDX_N    = (short*) malloc(sizeof(short) * _store_size);
 
 
   //mysize = nrow >= ncol ? nrow : ncol; // max
@@ -820,14 +820,14 @@ void diffusive_routing_cpu_func(void *buffers[], void *cl_args) {
     // obtain scalar values as inline arguments
     starpu_codelet_unpack_args(
         cl_args,
-         &_MASK.k,  &_MASK.p,  &_MASK.q,  &_MASK.m,  &_MASK.n,  &_MASK.r,
-          &_ELE.k,   &_ELE.p,   &_ELE.q,   &_ELE.m,   &_ELE.n,   &_ELE.r,
-            &_H.k,     &_H.p,     &_H.q,     &_H.m,     &_H.n,     &_H.r,
-            &_N.k,     &_N.p,     &_N.q,     &_N.m,     &_N.n,     &_N.r,
-        &_STORE.k, &_STORE.p, &_STORE.q, &_STORE.m, &_STORE.n, &_STORE.r,
+               &_MASK.k,        &_MASK.p,        &_MASK.q,        &_MASK.m,        &_MASK.n,        &_MASK.r,
+                &_ELE.k,         &_ELE.p,         &_ELE.q,         &_ELE.m,         &_ELE.n,         &_ELE.r,
+                  &_H.k,           &_H.p,           &_H.q,           &_H.m,           &_H.n,           &_H.r,
+                  &_N.k,           &_N.p,           &_N.q,           &_N.m,           &_N.n,           &_N.r,
+              &_STORE.k,       &_STORE.p,       &_STORE.q,       &_STORE.m,       &_STORE.n,       &_STORE.r,
         &_OLRDIM0_OLD.k, &_OLRDIM0_OLD.p, &_OLRDIM0_OLD.q, &_OLRDIM0_OLD.m, &_OLRDIM0_OLD.n, &_OLRDIM0_OLD.r,
         &_OLRDIM1_OLD.k, &_OLRDIM1_OLD.p, &_OLRDIM1_OLD.q, &_OLRDIM1_OLD.m, &_OLRDIM1_OLD.n, &_OLRDIM1_OLD.r,
-          &_OLR.k,   &_OLR.p,   &_OLR.q,   &_OLR.m,   &_OLR.n,   &_OLR.r,
+                &_OLR.k,         &_OLR.p,         &_OLR.q,         &_OLR.m,         &_OLR.n,         &_OLR.r,
         &_gsz, &dt, &nt
     );
 
@@ -893,13 +893,13 @@ void diffusive_routing_cpu_func(void *buffers[], void *cl_args) {
                 tmpsf = (_ELE.M[cur]-_ELE.M[top]+_H.M[cur]-_H.M[top])/cellsize + REAL_EPSILON;
         
                 if (tmpsf >= 0.0) {
-                    tmph = _H.M[cur];
-                    tmpn = _N.M[cur];
+                    tmph =     _H.M[cur];
+                    tmpn =     _N.M[cur];
                     tmpp = _STORE.M[cur];
                 }
                 else {
-                    tmph = _H.M[top];
-                    tmpn = _N.M[top];
+                    tmph =     _H.M[top];
+                    tmpn =     _N.M[top];
                     tmpp = _STORE.M[top];
                 }
         
@@ -942,8 +942,8 @@ void diffusive_routing_cpu_func(void *buffers[], void *cl_args) {
             }
       
             _OLRDIM0_OLD.M[cur] = OLRDIM0;
-            _OLR.M[cur] -= OLRDIM0;  // combine the routing in x
-            _OLR.M[top] += OLRDIM0;
+            _OLR.M[cur]        -= OLRDIM0;  // combine the routing in x
+            _OLR.M[top]        += OLRDIM0;
         }
     }
 
@@ -1034,8 +1034,8 @@ void diffusive_routing_cpu_func(void *buffers[], void *cl_args) {
             }
     
             _OLRDIM1_OLD.M[cur] = OLRDIM1;
-            _OLR.M[cur] -= OLRDIM1;  // combine the routing in y
-            _OLR.M[rgt] += OLRDIM1; 
+            _OLR.M[cur]        -= OLRDIM1;  // combine the routing in y
+            _OLR.M[rgt]        += OLRDIM1; 
         }
     }
 }
@@ -1044,7 +1044,8 @@ void diffusive_routing_cpu_func(void *buffers[], void *cl_args) {
 struct starpu_codelet diffusive_routing_cl {
     .cpu_func = {diffusive_routing_cpu_func},
     .nbuffers = 8,
-    .modes    = {STARPU_R, STARPU_RW, STARPU_R, STARPU_R, STARPU_R, STARPU_RW, STARPU_RW, STARPU_R}
+    .modes    = {STARPU_R, STARPU_R,  STARPU_R,  STARPU_R, 
+                 STARPU_R, STARPU_RW, STARPU_RW, STARPU_W}
 };
 
 // Computes diffusive routing
@@ -1277,7 +1278,7 @@ int WaterShed::comp_diffusive_routing_starpu(real_t dt) {
             STARPU_R,        store_blk_h[k],
             STARPU_RW, olrdim0_old_blk_h[k],
             STARPU_RW, olrdim1_old_blk_h[k],
-            STARPU_RW,         olr_blk_h[k],
+            STARPU_W,          olr_blk_h[k],
 
             STARPU_VALUE, &m->k,  sizeof(&m->k),
             STARPU_VALUE, &m->p,  sizeof(&m->p),
