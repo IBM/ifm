@@ -1619,32 +1619,16 @@ struct starpu_codelet outlet_cl {
 };
 
 // Computes outlet flow
-// @note h, store, n data arrays are _not_ divided into nblocks since their block size is different from outlets and out_slopes block size
 int WaterShed::comp_outlet_starpu(real_t dt) {
 
     if (_N_OUT > 0) {
 
         // define StarPU handles for data arrays
-        starpu_data_handle_t outlets_h, h_h, store_h, out_slopes_h, n_h;
+        starpu_data_handle_t outlets_h, out_slopes_h;
     
         // register data arrays with StarPU
-        starpu_vector_data_register(&outlets_h,    0, (uintptr_t)_OUTLETS,    _N_OUT,        sizeof(_OUTLETS[0]));
-        starpu_vector_data_register(&h_h,          0, (uintptr_t)_H,          _store_size, sizeof(_H[0]));
-        starpu_vector_data_register(&store_h,      0, (uintptr_t)_STORE,      _store_size, sizeof(_STORE[0]));
-        starpu_vector_data_register(&out_slopes_h, 0, (uintptr_t)_OUT_SLOPES, _N_OUT,        sizeof(_OUT_SLOPES[0]));
-        starpu_vector_data_register(&n_h,          0, (uintptr_t)_N,          _store_size, sizeof(_N[0]));
-    
-        // divide arrays into blocks
-        struct starpu_data_filter block_filter = {
-            .filter_func = starpu_vector_filter_block,
-            .nchildren   = nt,
-        };
-    
-        starpu_data_partition(outlets_h,    &block_filter);
-        // starpu_data_partition(h_h,          &block_filter);
-        // starpu_data_partition(store_h,      &block_filter);
-        starpu_data_partition(out_slopes_h, &block_filter);
-        // starpu_data_partition(n_h,          &block_filter);
+        starpu_vector_data_register(&outlets_h,    0, (uintptr_t)_OUTLETS,    _N_OUT, sizeof(_OUTLETS[0]));
+        starpu_vector_data_register(&out_slopes_h, 0, (uintptr_t)_OUT_SLOPES, _N_OUT, sizeof(_OUT_SLOPES[0]));
     
         real_t dtdx2 = dt/(_gsz*_gsz);
     
@@ -1672,21 +1656,12 @@ int WaterShed::comp_outlet_starpu(real_t dt) {
         }
     
         // wait for all tasks submitted so far
+        // @todo remove explicit synchronisation in future
         starpu_task_wait_for_all();
-    
-        // unpartition data
-        starpu_data_unpartition(outlets_h,    0);
-        // starpu_data_unpartition(h_h,          0);
-        // starpu_data_unpartition(store_h,      0);
-        starpu_data_unpartition(out_slopes_h, 0);
-        // starpu_data_unpartition(n_h,          0);
     
         // unregister data arrays
         starpu_data_unregister(outlets_h);
-        starpu_data_unregister(h_h);
-        starpu_data_unregister(store_h);
         starpu_data_unregister(out_slopes_h);
-        starpu_data_unregister(n_h);
     }
 
     return 0;
